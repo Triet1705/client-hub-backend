@@ -1,13 +1,14 @@
 package com.clienthub.client_hub_backend;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
-@EnableAutoConfiguration(exclude = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, 
+				properties = {
+					"spring.datasource.url=jdbc:h2:mem:testdb",
+					"spring.datasource.driver-class-name=org.h2.Driver",
+					"spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+				})
 class ClientHubBackendApplicationTests {
 
 	@Test
