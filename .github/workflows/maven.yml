@@ -1,0 +1,147 @@
+name: Java CI with Maven
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  build-and-test:
+    name: Build & Verify (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Service Container: Giả lập Database cho Integration Test
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: clienthub_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Checkout Code
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # 2. Setup Java 21
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "maven"
+
+      # 3. Cấp quyền chạy Maven Wrapper
+      - name: Grant Execute Permission for Maven Wrapper
+        run: chmod +x mvnw
+
+      # 4. Build & Test (Multi-module)
+      # -B: Batch mode (giảm log)
+      - name: Build with Maven
+        run: ./mvnw clean verify -B
+        env:
+          # --- Dummy Environment Variables (CI Only) ---
+
+          # Database (Kết nối vào Service Postgres ở trên)
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: clienthub_test
+          DB_USER: postgres
+          DB_PASS: password
+
+          # Redis (Dummy)
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+          # Blockchain (Dummy Zero Address để pass validation)
+          ADMIN_WALLET_KEY: 0x0000000000000000000000000000000000000000000000000000000000000000
+          BLOCKCHAIN_NODE_URL: http://localhost:8545
+
+          # Security (Dummy Secret)
+          JWT_SECRET: ci_test_secret_key_must_be_long_enough_for_hs256_algorithm_at_least_32_bytes
+
+          # Logging
+          LOGGING_LEVEL_ROOT: INFO
+
+      # 5. Upload Code Coverage (JaCoCo)
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          fail_ci_if_error: false
+
+      # 6. Dependency Security Scan (OWASP)
+      - name: OWASP Dependency Check
+        run: ./mvnw org.owasp:dependency-check-maven:check -B
+        continue-on-error: true
+
+      # 7. Upload Test Results
+      - name: Publish Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Maven Tests
+          path: "**/target/surefire-reports/*.xml"
+          reporter: java-junit
+
+  # Job 2: Docker Build & Push (Only on main branch)
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Grant Execute Permission for Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Build JAR
+        run: ./mvnw clean package -DskipTests -B
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Version
+        id: version
+        run: |
+          VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/client-hub-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/client-hub-backend:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/client-hub-backend:${{ steps.version.outputs.sha_short }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/client-hub-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/client-hub-backend:buildcache,mode=max
