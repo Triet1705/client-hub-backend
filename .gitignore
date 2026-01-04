@@ -89,9 +89,10 @@ local.properties
 *.deb
 *.rpm
 
-# Documentation (keep essential docs)
-!README.md
-!DOCKER.md
-!HELP.md
-!CONTRIBUTING.md
-!LICENSE.md
+# Documentation (optional - uncomment to keep specific docs)
+# !DOCKER.md
+# !CONTRIBUTING.md
+# !LICENSE.md
+
+README.md
+HELP.md
