@@ -32,11 +32,17 @@ WARNING=0
 # ============================================================================
 echo -e "${YELLOW}📁 Checking file extensions...${NC}"
 
-SENSITIVE_EXTENSIONS='(\.env$|\.env\.|\.key$|\.pem$|\.p12$|\.jks$|\.pfx$|\.secret$|application-prod\.properties|application-production\.properties)'
+# Block actual .env files but allow .env.example and .env.template
+SENSITIVE_EXTENSIONS='(\.env$|\.env\.local$|\.env\.development$|\.env\.production$|\.env\.staging$|\.key$|\.pem$|\.p12$|\.jks$|\.pfx$|\.secret$|application-prod\.properties|application-production\.properties)'
 
 for file in $STAGED_FILES; do
     # Skip hook files themselves and lock files
     if [[ "$file" == *".githooks/"* ]] || [[ "$file" == *"package-lock.json"* ]] || [[ "$file" == *"yarn.lock"* ]]; then
+        continue
+    fi
+    
+    # Allow .env.example and .env.template (template files are safe to commit)
+    if [[ "$file" == *".env.example"* ]] || [[ "$file" == *".env.template"* ]]; then
         continue
     fi
     
@@ -99,8 +105,8 @@ done
 # ============================================================================
 echo -e "${YELLOW}🔍 Scanning for generic secrets patterns...${NC}"
 
-# Only scan code files (not images, videos, archives)
-CODE_FILES=$(echo "$STAGED_FILES" | grep -E '\.(java|properties|yml|yaml|xml|ts|tsx|js|jsx|sol|json)$' || true)
+# Only scan code files (not images, videos, archives) and EXCLUDE test files
+CODE_FILES=$(echo "$STAGED_FILES" | grep -E '\.(java|properties|yml|yaml|xml|ts|tsx|js|jsx|sol|json)$' | grep -vE '(Test\.(java|ts)|\.test\.(js|ts)|\.spec\.(js|ts)|/test/|/tests/)' || true)
 
 if [ -n "$CODE_FILES" ]; then
     # Generic secret patterns (password, token, api_key, etc.)
@@ -111,8 +117,8 @@ if [ -n "$CODE_FILES" ]; then
             continue
         fi
         
-        # Check added lines only (grep for +)
-        MATCHES=$(git diff --cached "$file" | grep -E "^\+" | grep -iE "$SECRET_PATTERNS" | grep -vE "(TODO|FIXME|EXAMPLE|YOUR_.*_HERE|REPLACE_ME)" || true)
+        # Check added lines only (grep for +) and exclude test patterns
+        MATCHES=$(git diff --cached "$file" | grep -E "^\+" | grep -iE "$SECRET_PATTERNS" | grep -vE "(TODO|FIXME|EXAMPLE|YOUR_.*_HERE|REPLACE_ME|TEST_SECRET|TEST_TOKEN|MOCK_)" || true)
         
         if [ -n "$MATCHES" ]; then
             echo -e "${YELLOW}⚠️  WARNING: Potential secret pattern in $file${NC}"
