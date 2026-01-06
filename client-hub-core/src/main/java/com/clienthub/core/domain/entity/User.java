@@ -62,9 +62,6 @@ public class User extends BaseEntity {
         return id;
     }
 
-    // ❌ No setId() - ID is auto-generated and should never be modified
-    // Removing setter prevents privilege escalation attacks
-
     public String getEmail() {
         return email;
     }
@@ -73,11 +70,6 @@ public class User extends BaseEntity {
         this.email = email;
     }
 
-    /**
-     * Get password hash for authentication purposes only.
-     * ⚠️ This method should ONLY be used by Spring Security's UserDetailsService.
-     * Password is marked with @JsonIgnore to prevent JSON serialization.
-     */
     public String getPasswordHash() {
         return password;
     }
@@ -177,10 +169,6 @@ public class User extends BaseEntity {
         }
     }
 
-    /**
-     * Equals and HashCode based on business key (email).
-     * ✅ Using email instead of ID because ID may be null before persist.
-     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
