@@ -44,6 +44,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Web (Required for Jakarta Servlet API: HttpServletRequest, HttpServletResponse, FilterChain) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
         <!-- Spring Security  -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
