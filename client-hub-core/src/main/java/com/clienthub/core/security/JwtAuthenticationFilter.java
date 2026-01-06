@@ -11,6 +11,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -48,6 +49,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // Skip if already authenticated (avoid redundant database queries)
+            if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             // Validate token type - only accept ACCESS tokens
             TokenType tokenType = tokenProvider.extractTokenType(jwt);
             if (tokenType != TokenType.ACCESS) {
@@ -74,11 +81,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
             // Set authentication in security context
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            if (SecurityContextHolder.getContext().getAuthentication() != null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
             log.debug("Successfully authenticated user: {} (ID: {})", userEmail, userId);
 
         } catch (JwtException ex) {
             log.error("Invalid JWT token: {}", ex.getMessage());
+        } catch (UsernameNotFoundException ex) {
+            log.warn("User not found in database (may have been deleted): {}", ex.getMessage());
         } catch (IllegalArgumentException ex) {
             log.error("JWT claims string is empty: {}", ex.getMessage());
         } catch (Exception ex) {
