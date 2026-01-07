@@ -22,7 +22,7 @@ public class User extends BaseEntity {
 
     @NotBlank
     @Column(nullable = false)
-    @JsonIgnore  // ✅ Never expose password in JSON responses
+    @JsonIgnore
     private String password;
 
     @Column(name = "full_name")

@@ -117,8 +117,8 @@ if [ -n "$CODE_FILES" ]; then
             continue
         fi
         
-        # Check added lines only (grep for +) and exclude test patterns
-        MATCHES=$(git diff --cached "$file" | grep -E "^\+" | grep -iE "$SECRET_PATTERNS" | grep -vE "(TODO|FIXME|EXAMPLE|YOUR_.*_HERE|REPLACE_ME|TEST_SECRET|TEST_TOKEN|MOCK_)" || true)
+        # Check added lines only (grep for +) and exclude test patterns and safe password masking
+        MATCHES=$(git diff --cached "$file" | grep -E "^\+" | grep -iE "$SECRET_PATTERNS" | grep -vE "(TODO|FIXME|EXAMPLE|YOUR_.*_HERE|REPLACE_ME|TEST_SECRET|TEST_TOKEN|MOCK_|\[PROTECTED\]|\*\*\*\*)" || true)
         
         if [ -n "$MATCHES" ]; then
             echo -e "${YELLOW}⚠️  WARNING: Potential secret pattern in $file${NC}"
