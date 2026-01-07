@@ -26,10 +26,6 @@ public class TenantAspect {
     @PersistenceContext
     private EntityManager entityManager;
 
-    /**
-     * REMOVED 'synchronized': EntityManager is thread-bound proxy.
-     * Using synchronized on a Singleton Aspect would serialize all DB access (Performance Disaster).
-     */
     @Before("execution(* org.springframework.data.jpa.repository.JpaRepository+.*(..))")
     public void enableTenantFilter() {
         String tenantId = TenantContext.getTenantId();
@@ -43,19 +39,19 @@ public class TenantAspect {
         try {
             Session session = entityManager.unwrap(Session.class);
 
-            // 2. Idempotency Check: If filter already enabled, assume it's correct for this request
-            Filter existingFilter = session.getEnabledFilter(TENANT_FILTER_NAME);
-            if (existingFilter != null) {
-                log.trace("Tenant filter already enabled for current session");
-                return;
+            // 2. Enable or Update Filter
+            Filter filter = session.getEnabledFilter(TENANT_FILTER_NAME);
+            
+            if (filter == null) {
+                // First time: enable filter
+                filter = session.enableFilter(TENANT_FILTER_NAME);
+                log.trace("Enabled tenant filter for tenantId: {}", tenantId);
             }
-
-            // 3. Enable Filter
-            Filter filter = session.enableFilter(TENANT_FILTER_NAME);
+            
             filter.setParameter("tenantId", tenantId);
-            log.trace("Enabled tenant filter for tenantId: {}", tenantId);
+            log.trace("Set tenant filter parameter: {}", tenantId);
 
-            // 4. Register Cleanup (Only if in Transaction)
+            // 3. Register Cleanup (Only if in Transaction)
             if (TransactionSynchronizationManager.isSynchronizationActive()) {
                 registerTransactionCallback(session, tenantId);
             } else {
