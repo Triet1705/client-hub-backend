@@ -1,10 +1,13 @@
 package com.clienthub.common.domain;
 
+import com.clienthub.common.context.TenantContext;
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+
+import jakarta.persistence.PrePersist;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
@@ -44,6 +47,16 @@ public abstract class BaseEntity implements Serializable {
 
     @Column(name = "tenant_id", nullable = false, updatable = false)
     private String tenantId;
+
+    @PrePersist
+    public void onPrePersist() {
+        if (this.tenantId == null) {
+            String currentTenant = TenantContext.getTenantId();
+            if (currentTenant != null) {
+                this.tenantId = currentTenant;
+            }
+        }
+    }
 
     // Getters and Setters
     public LocalDateTime getCreatedAt() {

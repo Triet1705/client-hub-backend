@@ -1,6 +1,7 @@
 package com.clienthub.api.dto.auth;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.UUID;
 
 public class JwtResponse {
 
@@ -16,14 +17,14 @@ public class JwtResponse {
     @JsonProperty("expires_in")
     private Long expiresIn;  // ✅ NEW: Seconds until expiry
 
-    private String id;
+    private UUID id;
     private String email;
     private String role;
 
     public JwtResponse() {
     }
 
-    public JwtResponse(String accessToken, String refreshToken, Long expiresIn, String id, String email, String role) {
+    public JwtResponse(String accessToken, String refreshToken, Long expiresIn, UUID id, String email, String role) {
         this.accessToken = accessToken;
         this.refreshToken = refreshToken;
         this.tokenType = "Bearer";
@@ -46,8 +47,8 @@ public class JwtResponse {
     public Long getExpiresIn() { return expiresIn; }  // ✅ NEW
     public void setExpiresIn(Long expiresIn) { this.expiresIn = expiresIn; }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

@@ -6,18 +6,24 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Objects;
+import java.util.UUID;
 
 @Entity
-@Table(name = "users", schema = "core")
+@Table(name = "users")
 public class User extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    @Column(columnDefinition = "uuid")
+    private UUID id;
+
+    @NotBlank
+    @Column(name = "tenant_id", nullable = false)
+    private String tenantId;
 
     @NotBlank
     @Email
-    @Column(unique = true, nullable = false)
+    @Column(nullable = false)
     private String email;
 
     @NotBlank
@@ -48,8 +54,9 @@ public class User extends BaseEntity {
     public User(){
     }
 
-    public User(String id, String email, String password, String fullName, Role role, boolean active, String walletAddress) {
+    public User(UUID id, String tenantId, String email, String password, String fullName, Role role, boolean active, String walletAddress) {
         this.id = id;
+        this.tenantId = tenantId;
         this.email = email;
         this.password = password;
         this.fullName = fullName;
@@ -58,8 +65,16 @@ public class User extends BaseEntity {
         this.walletAddress = walletAddress;
     }
 
-    public String getId() {
+    public UUID getId() {
         return id;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public String getEmail() {
@@ -117,7 +132,8 @@ public class User extends BaseEntity {
     }
 
     public static class UserBuilder {
-        private String id;
+        private UUID id;
+        private String tenantId;
         private String email;
         private String password;
         private String fullName;
@@ -129,8 +145,13 @@ public class User extends BaseEntity {
 
         }
 
-        public UserBuilder id(String id) {
+        public UserBuilder id(UUID id) {
             this.id = id;
+            return this;
+        }
+
+        public UserBuilder tenantId(String tenantId) {
+            this.tenantId = tenantId;
             return this;
         }
 
@@ -165,7 +186,7 @@ public class User extends BaseEntity {
         }
 
         public User build() {
-            return new User(id, email, password, fullName, role, active, walletAddress);
+            return new User(id, tenantId, email, password, fullName, role, active, walletAddress);
         }
     }
 
@@ -189,6 +210,7 @@ public class User extends BaseEntity {
     public String toString() {
         return "User{" +
                 "id='" + id + '\'' +
+                ", tenantId='" + tenantId + '\'' +
                 ", email='" + email + '\'' +
                 ", fullName='" + fullName + '\'' +
                 ", role=" + role +
