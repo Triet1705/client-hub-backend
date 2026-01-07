@@ -6,6 +6,7 @@ import com.clienthub.api.dto.auth.RegisterRequest;
 import com.clienthub.api.dto.auth.RegisterResponse;
 import com.clienthub.api.dto.common.ErrorResponse;
 import com.clienthub.core.domain.entity.User;
+import com.clienthub.core.security.CustomUserDetails;
 import com.clienthub.core.security.JwtTokenProvider;
 import com.clienthub.core.service.AuthService;
 import jakarta.validation.Valid;
@@ -19,7 +20,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -70,15 +70,12 @@ public class AuthController {
             // 2. Set authentication in SecurityContext
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // 3. Get UserDetails from authentication principal
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            // 3. Get CustomUserDetails from authentication principal
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 
-            // 4. Get User entity from database
-            User user = authService.getUserByEmail(userDetails.getUsername());
-
-            // 5. Check if user is active
-            if (!user.isActive()) {
-                log.warn("Inactive user attempted login: {}", user.getEmail());
+            // 4. Check if user is active
+            if (!userDetails.isEnabled()) {
+                log.warn("Inactive user attempted login: {}", userDetails.getEmail());
                 return ResponseEntity
                         .status(HttpStatus.FORBIDDEN)
                         .body(new ErrorResponse(
@@ -88,27 +85,27 @@ public class AuthController {
                         ));
             }
 
-            // 6. Generate JWT tokens
+            // 5. Generate JWT tokens using data from CustomUserDetails
             String accessToken = jwtTokenProvider.generateAccessToken(
-                    user.getId(),
-                    user.getEmail(),
-                    user.getRole().name()
+                    userDetails.getId(),     // ← From CustomUserDetails
+                    userDetails.getEmail(),  // ← From CustomUserDetails
+                    userDetails.getRole()    // ← From CustomUserDetails
             );
-            String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+            String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails.getId());
 
-            // 7. Calculate expires_in (convert milliseconds to seconds)
+            // 6. Calculate expires_in (convert milliseconds to seconds)
             Long expiresIn = jwtExpirationMs / 1000;
 
-            log.info("User logged in successfully: {} (role: {})", user.getEmail(), user.getRole());
+            log.info("User logged in successfully: {} (role: {})", userDetails.getEmail(), userDetails.getRole());
 
-            // 8. Return JWT response
+            // 7. Return JWT response
             return ResponseEntity.ok(new JwtResponse(
                     accessToken,
                     refreshToken,
                     expiresIn,
-                    user.getId(),
-                    user.getEmail(),
-                    user.getRole().name()
+                    userDetails.getId(),
+                    userDetails.getEmail(),
+                    userDetails.getRole()
             ));
 
         } catch (BadCredentialsException e) {
@@ -154,7 +151,7 @@ public class AuthController {
                         ));
             }
 
-            // 2. Register new user (AuthService handles password encoding and default role)
+            // 2. Register new user
             User newUser = authService.registerUser(
                     registerRequest.getFullName(),
                     registerRequest.getEmail(),
