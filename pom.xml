@@ -32,11 +32,12 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <mapstruct.version>1.6.0</mapstruct.version>
-        <lombok.version>1.18.34</lombok.version>
+        <lombok.version>1.18.36</lombok.version>
         <web3j.version>4.10.0</web3j.version>
         <springdoc.version>2.3.0</springdoc.version>
         <testcontainers.version>1.19.3</testcontainers.version>
         <spotless.version>2.41.1</spotless.version>
+        <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
     <!-- Quản lý phiên bản tập trung -->
@@ -74,6 +75,25 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            
+            <!-- JJWT (JWT Token Library) -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
