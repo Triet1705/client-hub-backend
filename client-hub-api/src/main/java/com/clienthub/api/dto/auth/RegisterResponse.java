@@ -1,6 +1,7 @@
 package com.clienthub.api.dto.auth;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.UUID;
 
 /**
  * Response DTO for successful user registration
@@ -10,7 +11,7 @@ public class RegisterResponse {
     private String message;
 
     @JsonProperty("user_id")
-    private String userId;
+    private UUID userId;
 
     private String email;
 
@@ -20,7 +21,7 @@ public class RegisterResponse {
     public RegisterResponse() {
     }
 
-    public RegisterResponse(String message, String userId, String email, String fullName) {
+    public RegisterResponse(String message, UUID userId, String email, String fullName) {
         this.message = message;
         this.userId = userId;
         this.email = email;
@@ -35,11 +36,11 @@ public class RegisterResponse {
         this.message = message;
     }
 
-    public String getUserId() {
+    public UUID getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(UUID userId) {
         this.userId = userId;
     }
 

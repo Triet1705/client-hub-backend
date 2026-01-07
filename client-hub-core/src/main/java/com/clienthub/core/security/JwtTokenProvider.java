@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Component
@@ -40,14 +41,14 @@ public class JwtTokenProvider {
      * @param role User's role (FREELANCER, CLIENT, ADMIN)
      * @return JWT token string
      */
-    public String generateAccessToken(String userId, String email, String role) {
+    public String generateAccessToken(UUID userId, String email, String role) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId);
+        claims.put("userId", userId.toString());
         claims.put("email", email);
         claims.put("role", role);
         claims.put("type", TokenType.ACCESS.getValue());
         
-        return createToken(claims, userId, jwtExpirationMs);
+        return createToken(claims, userId.toString(), jwtExpirationMs);
     }
 
     /**
@@ -56,11 +57,11 @@ public class JwtTokenProvider {
      * @param userId User's unique identifier
      * @return Refresh token string
      */
-    public String generateRefreshToken(String userId) {
+    public String generateRefreshToken(UUID userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", TokenType.REFRESH.getValue());
         
-        return createToken(claims, userId, refreshExpirationMs);
+        return createToken(claims, userId.toString(), refreshExpirationMs);
     }
 
     /**
@@ -82,8 +83,9 @@ public class JwtTokenProvider {
     /**
      * Extract username (subject) from token
      */
-    public String extractUserId(String token) {
-        return extractClaim(token, Claims::getSubject);
+    public UUID extractUserId(String token) {
+        String userIdStr = extractClaim(token, Claims::getSubject);
+        return UUID.fromString(userIdStr);
     }
 
     /**
@@ -148,9 +150,9 @@ public class JwtTokenProvider {
      * @param userId Expected user ID
      * @return true if token is valid and matches user
      */
-    public Boolean validateToken(String token, String userId) {
+    public Boolean validateToken(String token, UUID userId) {
         try {
-            final String extractedUserId = extractUserId(token);
+            final UUID extractedUserId = extractUserId(token);
             return (extractedUserId.equals(userId) && !isTokenExpired(token));
         } catch (JwtException | IllegalArgumentException e) {
             // Token validation failed (signature invalid, malformed, expired, etc.)

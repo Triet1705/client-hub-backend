@@ -4,10 +4,11 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
+import java.util.UUID;
 
 public class CustomUserDetails implements UserDetails {
 
-    private final String id;
+    private final UUID id;
     private final String email;
     private final String password;
     private final String role;
@@ -15,7 +16,7 @@ public class CustomUserDetails implements UserDetails {
     private final Collection<? extends GrantedAuthority> authorities;
 
     public CustomUserDetails(
-            String id,
+            UUID id,
             String email,
             String password,
             String role,
@@ -35,7 +36,7 @@ public class CustomUserDetails implements UserDetails {
      * Get user's unique ID (UUID)
      * Used for JWT token generation without additional DB query
      */
-    public String getId() {
+    public UUID getId() {
         return id;
     }
 

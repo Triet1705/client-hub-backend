@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -19,7 +21,7 @@ class JwtTokenProviderTest {
 
     private JwtTokenProvider jwtTokenProvider;
     private static final String TEST_SECRET = "test_secret_key_must_be_at_least_32_characters_long_for_hs256_algorithm";
-    private static final String TEST_USER_ID = "user123";
+    private static final UUID TEST_USER_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
     private static final String TEST_EMAIL = "test@example.com";
     private static final String TEST_ROLE = "FREELANCER";
 
@@ -50,7 +52,7 @@ class JwtTokenProviderTest {
         String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
 
         // When
-        String extractedUserId = jwtTokenProvider.extractUserId(token);
+        UUID extractedUserId = jwtTokenProvider.extractUserId(token);
 
         // Then
         assertEquals(TEST_USER_ID, extractedUserId);
@@ -98,7 +100,7 @@ class JwtTokenProviderTest {
         String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
 
         // When
-        Boolean isValid = jwtTokenProvider.validateToken(token, "wrong_user_id");
+        Boolean isValid = jwtTokenProvider.validateToken(token, UUID.fromString("650e8400-e29b-41d4-a716-446655440001"));
 
         // Then
         assertFalse(isValid);
