@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 
+
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
@@ -28,14 +29,13 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         var authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
 
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password(user.getPasswordHash())
-                .authorities(Collections.singletonList(authority))
-                .accountExpired(false)
-                .accountLocked(!user.isActive())
-                .credentialsExpired(false)
-                .disabled(!user.isActive())
-                .build();
+        return new CustomUserDetails(
+                user.getId(),           
+                user.getEmail(),        
+                user.getPasswordHash(), 
+                user.getRole().name(),  
+                user.isActive(),        
+                Collections.singletonList(authority)  
+        );
     }
 }

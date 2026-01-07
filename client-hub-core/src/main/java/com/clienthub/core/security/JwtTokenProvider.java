@@ -21,7 +21,7 @@ public class JwtTokenProvider {
     @Value("${jwt.expiration:900000}") // 15 minutes default
     private long jwtExpirationMs;
 
-    @Value("${jwt.refresh-expiration:86400000}") // 24 hours default
+    @Value("${jwt.refresh-expiration:604800000}") // 7 days default
     private long refreshExpirationMs;
 
     /**
