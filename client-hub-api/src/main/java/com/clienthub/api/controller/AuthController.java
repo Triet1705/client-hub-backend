@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -73,32 +74,20 @@ public class AuthController {
             // 3. Get CustomUserDetails from authentication principal
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 
-            // 4. Check if user is active
-            if (!userDetails.isEnabled()) {
-                log.warn("Inactive user attempted login: {}", userDetails.getEmail());
-                return ResponseEntity
-                        .status(HttpStatus.FORBIDDEN)
-                        .body(new ErrorResponse(
-                                "Account Disabled",
-                                "Your account has been deactivated. Please contact support.",
-                                HttpStatus.FORBIDDEN.value()
-                        ));
-            }
-
-            // 5. Generate JWT tokens using data from CustomUserDetails
+            // 4. Generate JWT tokens using data from CustomUserDetails
             String accessToken = jwtTokenProvider.generateAccessToken(
-                    userDetails.getId(),     // ← From CustomUserDetails
-                    userDetails.getEmail(),  // ← From CustomUserDetails
-                    userDetails.getRole()    // ← From CustomUserDetails
+                    userDetails.getId(),
+                    userDetails.getEmail(),
+                    userDetails.getRole()
             );
             String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails.getId());
 
-            // 6. Calculate expires_in (convert milliseconds to seconds)
+            // 5. Calculate expires_in (convert milliseconds to seconds)
             Long expiresIn = jwtExpirationMs / 1000;
 
             log.info("User logged in successfully: {} (role: {})", userDetails.getEmail(), userDetails.getRole());
 
-            // 7. Return JWT response
+            // 6. Return JWT response
             return ResponseEntity.ok(new JwtResponse(
                     accessToken,
                     refreshToken,
@@ -108,6 +97,15 @@ public class AuthController {
                     userDetails.getRole()
             ));
 
+        }catch (DisabledException e) {
+            log.warn("Login attempt with disabled account: {}", loginRequest.getEmail());
+            return ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse(
+                            "Account Disabled",
+                            "Your account has been deactivated. Please contact support.",
+                            HttpStatus.FORBIDDEN.value()
+                    ));
         } catch (BadCredentialsException e) {
             log.warn("Failed login attempt for email: {}", loginRequest.getEmail());
             return ResponseEntity
