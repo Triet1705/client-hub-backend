@@ -15,12 +15,16 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -36,7 +40,7 @@ public class TenantIsolationTest {
 
     @Autowired
     private UserRepository userRepository;
-    
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -50,68 +54,141 @@ public class TenantIsolationTest {
         TenantContext.clear();
     }
 
+    private User createUser(String tenantId, String email, User.Role role) {
+        TenantContext.setTenantId(tenantId);
+        User user = new User();
+        user.setEmail(email);
+        user.setPassword("password");
+        user.setFullName("User " + email);
+        user.setRole(role);
+        user.setTenantId(tenantId); // Explicit set to be safe
+        userRepository.save(user);
+        return user;
+    }
+
     @Test
-    @DisplayName("Verify Isolation: Tenant A cannot see data of Tenant B (PostgreSQL)")
-    void testTenantIsolation() {
+    @DisplayName("CHDEV-69: Custom JPQL queries respect tenant filter")
+    void testCustomQueriesRespectFilter() {
+        // Setup: Create users in 2 tenants
+        createUser("TENANT_1", "user1@t1.com", User.Role.CLIENT);
+        User user2 = createUser("TENANT_2", "user2@t2.com", User.Role.CLIENT);
+
+        entityManager.flush();
+        entityManager.clear();
+        TenantContext.clear();
+
+        // Verify: findByEmailCustom (JPQL) cross-tenant returns empty
         TenantContext.setTenantId("TENANT_1");
 
-        User user1 = new User();
-        user1.setEmail("user1@tenant1.com");
-        user1.setPassword("password123");
-        user1.setFullName("Tenant One User");
-        user1.setTenantId("TENANT_1");
-        user1.setRole(User.Role.CLIENT);
-        
-        userRepository.save(user1);
+        // Cố tình query email của Tenant 2
+        Optional<User> result = userRepository.findByEmailCustom("user2@t2.com");
+
+        assertTrue(result.isEmpty(), "Custom JPQL must NOT find user from another tenant");
+    }
+
+    @Test
+    @DisplayName("CHDEV-69: Pagination respects tenant isolation")
+    void testPaginationRespectFilter() {
+        // Setup: Create 15 users in Tenant 1, 10 in Tenant 2
+        IntStream.range(0, 15).forEach(i -> createUser("TENANT_1", "t1_user" + i + "@test.com", User.Role.CLIENT));
+        IntStream.range(0, 10).forEach(i -> createUser("TENANT_2", "t2_user" + i + "@test.com", User.Role.CLIENT));
+
+        entityManager.flush();
+        entityManager.clear();
+        TenantContext.clear();
+
+        // Verify: Page(0, 10) returns only Tenant 1 users
+        TenantContext.setTenantId("TENANT_1");
+
+        Page<User> page = userRepository.findAll(PageRequest.of(0, 10));
+
+        assertEquals(15, page.getTotalElements(), "Total elements for Tenant 1 should be 15");
+        assertEquals(2, page.getTotalPages(), "Total pages for Tenant 1 should be 2 (15/10)");
+        assertEquals(10, page.getContent().size(), "Current page size should be 10");
+
+        // Verify content owner
+        assertTrue(page.getContent().stream().allMatch(u -> u.getTenantId().equals("TENANT_1")),
+                "All users in page must belong to TENANT_1");
+    }
+
+    @Test
+    @DisplayName("CHDEV-69: Native queries BYPASS filter (Documented Limitation)")
+    void testNativeQueriesBypassFilter() {
+        // Setup: Create user in Tenant 2
+        createUser("TENANT_2", "user2@t2.com", User.Role.CLIENT);
+
+        entityManager.flush();
+        entityManager.clear();
+        TenantContext.clear();
+
+        // Execute: Native query from Tenant 1 context
+        TenantContext.setTenantId("TENANT_1");
+
+        // Native query "SELECT * FROM users" sẽ bỏ qua Hibernate Filter
+        List<User> users = userRepository.findAllNative();
+
+        // Assert: Query returns Tenant 2 data (Proving the bypass risk)
+        assertFalse(users.isEmpty(), "Native query SHOULD bypass filter (Known Limitation)");
+        assertTrue(users.stream().anyMatch(u -> u.getTenantId().equals("TENANT_2")),
+                "Should find Tenant 2 data due to native query bypass");
+    }
+
+    @Test
+    @DisplayName("CHDEV-69: DELETE queries respect tenant filter")
+    void testDeleteQueriesRespectFilter() {
+        // Setup: Create 2 users in Tenant 1, 1 user in Tenant 2
+        User user1 = createUser("TENANT_1", "user1@t1.com", User.Role.CLIENT);
+        createUser("TENANT_1", "user2@t1.com", User.Role.CLIENT);
+        User user2tenant = createUser("TENANT_2", "user2@t2.com", User.Role.CLIENT);
         UUID user1Id = user1.getId();
-        
-        entityManager.flush();
-        entityManager.clear();
-        
-        TenantContext.clear();
+        UUID tenant2UserId = user2tenant.getId();
 
-        TenantContext.setTenantId("TENANT_2");
-
-        User user2 = new User();
-        user2.setEmail("user2@tenant2.com");
-        user2.setPassword("password456");
-        user2.setFullName("Tenant Two User");
-        user2.setTenantId("TENANT_2");
-        user2.setRole(User.Role.CLIENT);
-
-        userRepository.save(user2);
-        UUID user2Id = user2.getId();
-        
         entityManager.flush();
         entityManager.clear();
         TenantContext.clear();
 
+        // Execute: Tenant 1 tries to delete BOTH:
+        // - Its own user (should succeed)
+        // - Tenant 2's user (should be blocked by filter)
         TenantContext.setTenantId("TENANT_1");
 
-        List<User> tenant1Users = userRepository.findAll();
-        assertEquals(1, tenant1Users.size(), "Tenant 1 should see exactly 1 user");
-        assertEquals("user1@tenant1.com", tenant1Users.get(0).getEmail());
-        
-        assertEquals(1, userRepository.count(), "Tenant 1 count should be 1 (filter active)");
+        // Delete own user - should work
+        userRepository.deleteById(user1Id);
+        entityManager.flush();
 
+        // Try to delete Tenant 2 user - filter should block this
+        userRepository.deleteById(tenant2UserId); 
+        entityManager.flush();
+
+        // Verify: Tenant 1 count dropped to 1 (only deleted own user)
+        long countT1 = userRepository.count();
+        assertEquals(1, countT1, "Tenant 1 should have 1 user left (deleted own, couldn't delete Tenant 2's)");
+    }
+
+    @Test
+    @DisplayName("CHDEV-69: Aggregate queries respect tenant filter")
+    void testAggregateQueriesRespectFilter() {
+        // Setup: 5 CLIENTs in Tenant 1, 3 CLIENTs in Tenant 2
+        IntStream.range(0, 5).forEach(i -> createUser("TENANT_1", "t1_" + i + "@test.com", User.Role.CLIENT));
+        IntStream.range(0, 3).forEach(i -> createUser("TENANT_2", "t2_" + i + "@test.com", User.Role.CLIENT));
+
+        entityManager.flush();
         entityManager.clear();
-        TenantContext.setTenantId("TENANT_2");
+        TenantContext.clear();
 
-        List<User> tenant2Users = userRepository.findAll();
-        assertEquals(1, tenant2Users.size(), "Tenant 2 should see exactly 1 user");
-        assertEquals("user2@tenant2.com", tenant2Users.get(0).getEmail());
-        assertEquals(1, userRepository.count(), "Tenant 2 count should be 1 (filter active)");
+        // Execute: countByRole(CLIENT) from Tenant 1 context
+        TenantContext.setTenantId("TENANT_1");
+
+        long count = userRepository.countByRole(User.Role.CLIENT);
+
+        // Verify: Returns 5 (not 5+3)
+        assertEquals(5, count, "Aggregate count should only include Tenant 1 records");
     }
 
     @Test
     @DisplayName("Security: Missing Tenant Context throws Exception")
     void testMissingTenantContext() {
         TenantContext.clear();
-
-        SecurityException exception = assertThrows(SecurityException.class, () -> {
-            userRepository.findAll();
-        });
-        
-        assertNotNull(exception.getMessage());
+        assertThrows(SecurityException.class, () -> userRepository.findAll());
     }
 }
