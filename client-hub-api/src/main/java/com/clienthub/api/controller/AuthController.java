@@ -78,7 +78,8 @@ public class AuthController {
             String accessToken = jwtTokenProvider.generateAccessToken(
                     userDetails.getId(),
                     userDetails.getEmail(),
-                    userDetails.getRole()
+                    userDetails.getRole(),
+                    userDetails.getTenantId()
             );
             String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails.getId());
 
@@ -94,7 +95,8 @@ public class AuthController {
                     expiresIn,
                     userDetails.getId(),
                     userDetails.getEmail(),
-                    userDetails.getRole()
+                    userDetails.getRole(),
+                    userDetails.getTenantId()  // ✅ Include tenantId in response
             ));
 
         }catch (DisabledException e) {

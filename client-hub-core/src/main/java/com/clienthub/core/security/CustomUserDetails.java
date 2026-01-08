@@ -13,6 +13,7 @@ public class CustomUserDetails implements UserDetails {
     private final String password;
     private final String role;
     private final boolean active;
+    private final String tenantId;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public CustomUserDetails(
@@ -21,6 +22,7 @@ public class CustomUserDetails implements UserDetails {
             String password,
             String role,
             boolean active,
+            String tenantId,
             Collection<? extends GrantedAuthority> authorities
     ) {
         this.id = id;
@@ -28,6 +30,7 @@ public class CustomUserDetails implements UserDetails {
         this.password = password;
         this.role = role;
         this.active = active;
+        this.tenantId = tenantId;
         this.authorities = authorities;
     }
 
@@ -53,6 +56,10 @@ public class CustomUserDetails implements UserDetails {
      */
     public String getRole() {
         return role;
+    }
+
+    public String getTenantId() {
+        return tenantId;
     }
 
 
