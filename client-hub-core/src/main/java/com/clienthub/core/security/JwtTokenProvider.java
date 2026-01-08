@@ -41,11 +41,12 @@ public class JwtTokenProvider {
      * @param role User's role (FREELANCER, CLIENT, ADMIN)
      * @return JWT token string
      */
-    public String generateAccessToken(UUID userId, String email, String role) {
+    public String generateAccessToken(UUID userId, String email, String role, String tenantId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId.toString());
         claims.put("email", email);
         claims.put("role", role);
+        claims.put("tenantId", tenantId);
         claims.put("type", TokenType.ACCESS.getValue());
         
         return createToken(claims, userId.toString(), jwtExpirationMs);
@@ -100,6 +101,10 @@ public class JwtTokenProvider {
      */
     public String extractRole(String token) {
         return extractClaim(token, claims -> claims.get("role", String.class));
+    }
+
+    public String extractTenantId(String token) {
+        return extractClaim(token, claims -> claims.get("tenantId", String.class));
     }
 
     /**

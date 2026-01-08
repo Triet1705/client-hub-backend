@@ -1,5 +1,6 @@
 package com.clienthub.core.security;
 
+import com.clienthub.common.context.TenantContext;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -67,8 +68,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // Extract user information from token
             UUID userId = tokenProvider.extractUserId(jwt);
             String userEmail = tokenProvider.extractEmail(jwt);
+            String tenantId = tokenProvider.extractTenantId(jwt);
 
-            log.debug("Authenticating user: {} (ID: {})", userEmail, userId);
+            log.debug("Authenticating user: {} (ID: {}, Tenant: {})", userEmail, userId, tenantId);
+
+            if (tenantId != null && !tenantId.isBlank()) {
+                TenantContext.setTenantId(tenantId);
+                log.debug("TenantContext set to: {}", tenantId);
+            } else {
+                log.warn("No tenantId found in JWT token for user: {}", userEmail);
+            }
 
             // Load user details and create authentication
             UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
@@ -93,6 +102,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.error("JWT claims string is empty: {}", ex.getMessage());
         } catch (Exception ex) {
             log.error("Unexpected error during authentication", ex);
+        } finally {
+            TenantContext.clear();
         }
 
         filterChain.doFilter(request, response);

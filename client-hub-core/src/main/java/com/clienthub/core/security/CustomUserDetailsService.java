@@ -34,7 +34,8 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getEmail(),        
                 user.getPasswordHash(), 
                 user.getRole().name(),  
-                user.isActive(),        
+                user.isActive(),
+                user.getTenantId(),
                 Collections.singletonList(authority)  
         );
     }
