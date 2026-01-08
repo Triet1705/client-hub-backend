@@ -24,6 +24,7 @@ class JwtTokenProviderTest {
     private static final UUID TEST_USER_ID = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
     private static final String TEST_EMAIL = "test@example.com";
     private static final String TEST_ROLE = "FREELANCER";
+    private static final String TEST_TENANT_ID = "tenant-test-123";
 
     @BeforeEach
     void setUp() {
@@ -38,7 +39,7 @@ class JwtTokenProviderTest {
     @Test
     void shouldGenerateAccessToken() {
         // When
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // Then
         assertNotNull(token);
@@ -49,7 +50,7 @@ class JwtTokenProviderTest {
     @Test
     void shouldExtractUserIdFromToken() {
         // Given
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // When
         UUID extractedUserId = jwtTokenProvider.extractUserId(token);
@@ -61,7 +62,7 @@ class JwtTokenProviderTest {
     @Test
     void shouldExtractEmailFromToken() {
         // Given
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // When
         String extractedEmail = jwtTokenProvider.extractEmail(token);
@@ -73,7 +74,7 @@ class JwtTokenProviderTest {
     @Test
     void shouldExtractRoleFromToken() {
         // Given
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // When
         String extractedRole = jwtTokenProvider.extractRole(token);
@@ -83,9 +84,21 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void shouldExtractTenantIdFromToken() {
+        // Given
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
+
+        // When
+        String extractedTenantId = jwtTokenProvider.extractTenantId(token);
+
+        // Then
+        assertEquals(TEST_TENANT_ID, extractedTenantId);
+    }
+
+    @Test
     void shouldValidateCorrectToken() {
         // Given
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // When
         Boolean isValid = jwtTokenProvider.validateToken(token, TEST_USER_ID);
@@ -97,7 +110,7 @@ class JwtTokenProviderTest {
     @Test
     void shouldRejectTokenWithWrongUserId() {
         // Given
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // When
         Boolean isValid = jwtTokenProvider.validateToken(token, UUID.fromString("650e8400-e29b-41d4-a716-446655440001"));
@@ -132,7 +145,7 @@ class JwtTokenProviderTest {
     void shouldRejectExpiredToken() throws InterruptedException {
         // Given - Generate token with 1ms expiration
         ReflectionTestUtils.setField(jwtTokenProvider, "jwtExpirationMs", 1L);
-        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE);
+        String token = jwtTokenProvider.generateAccessToken(TEST_USER_ID, TEST_EMAIL, TEST_ROLE, TEST_TENANT_ID);
 
         // Wait for token to expire
         Thread.sleep(10);
