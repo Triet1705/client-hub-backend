@@ -1,5 +1,6 @@
 package com.clienthub.core.security;
 
+import com.clienthub.core.domain.enums.Role;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +25,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
@@ -60,13 +61,12 @@ public class SecurityConfig {
 
                 // Security Headers
                 .headers(headers -> headers
-                        .contentTypeOptions(contentTypeOptions -> contentTypeOptions.disable()) // Use defaults
-                        .xssProtection(xss -> xss.disable()) // Modern browsers handle this
-                        .frameOptions(frame -> frame.deny()) // Prevent clickjacking
+                        .contentTypeOptions(contentTypeOptions -> contentTypeOptions.disable())
+                        .xssProtection(xss -> xss.disable())
+                        .frameOptions(frame -> frame.deny())
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        // Public Endpoints (Login, Register, Docs)
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
