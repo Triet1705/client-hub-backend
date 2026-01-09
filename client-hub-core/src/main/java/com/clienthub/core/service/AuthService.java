@@ -2,6 +2,7 @@ package com.clienthub.core.service;
 
 import com.clienthub.core.domain.entity.User;
 import com.clienthub.core.repository.UserRepository;
+import com.clienthub.core.domain.enums.Role;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +42,8 @@ public class AuthService {
         user.setFullName(fullName);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole(User.Role.CLIENT);  // Default role for registration
+        user.setRole(Role.CLIENT);  // Default role for registration
+        user.setTenantId(email);  // Use email as tenant ID for new registrations
 
         return userRepository.save(user);
     }

@@ -1,6 +1,7 @@
 package com.clienthub.core.domain.entity;
 
 import com.clienthub.common.domain.BaseEntity;
+import com.clienthub.core.domain.enums.Role;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -36,19 +37,13 @@ public class User extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role; //ADMIN, CLIENT, FREELANCER
+    private Role role;
 
     @Column(name = "is_active")
     private boolean active = true;
 
     @Column(name = "wallet_address", unique = true)
     private String walletAddress;
-
-    public enum Role {
-        ADMIN,
-        FREELANCER,
-        CLIENT
-    }
 
     //CONSTRUCTOR
     public User(){
