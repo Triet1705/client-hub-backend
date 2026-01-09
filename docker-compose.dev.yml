@@ -7,10 +7,10 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-clienthub}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASS:-password}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql

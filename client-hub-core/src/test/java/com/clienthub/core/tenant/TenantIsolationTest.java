@@ -62,7 +62,7 @@ public class TenantIsolationTest {
         user.setPassword("password");
         user.setFullName("User " + email);
         user.setRole(role);
-        user.setTenantId(tenantId); // Explicit set to be safe
+        user.setTenantId(tenantId);
         userRepository.save(user);
         return user;
     }
@@ -71,8 +71,8 @@ public class TenantIsolationTest {
     @DisplayName("CHDEV-69: Custom JPQL queries respect tenant filter")
     void testCustomQueriesRespectFilter() {
         // Setup: Create users in 2 tenants
-        createUser("TENANT_1", "user1@t1.com", Role.ROLE_CLIENT);
-        User user2 = createUser("TENANT_2", "user2@t2.com", Role.ROLE_CLIENT);
+        createUser("TENANT_1", "user1@t1.com", Role.CLIENT);
+        User user2 = createUser("TENANT_2", "user2@t2.com", Role.CLIENT);
 
         entityManager.flush();
         entityManager.clear();
@@ -91,8 +91,8 @@ public class TenantIsolationTest {
     @DisplayName("CHDEV-69: Pagination respects tenant isolation")
     void testPaginationRespectFilter() {
         // Setup: Create 15 users in Tenant 1, 10 in Tenant 2
-        IntStream.range(0, 15).forEach(i -> createUser("TENANT_1", "t1_user" + i + "@test.com", Role.ROLE_CLIENT));
-        IntStream.range(0, 10).forEach(i -> createUser("TENANT_2", "t2_user" + i + "@test.com", Role.ROLE_CLIENT));
+        IntStream.range(0, 15).forEach(i -> createUser("TENANT_1", "t1_user" + i + "@test.com", Role.CLIENT));
+        IntStream.range(0, 10).forEach(i -> createUser("TENANT_2", "t2_user" + i + "@test.com", Role.CLIENT));
 
         entityManager.flush();
         entityManager.clear();
@@ -116,7 +116,7 @@ public class TenantIsolationTest {
     @DisplayName("CHDEV-69: Native queries BYPASS filter (Documented Limitation)")
     void testNativeQueriesBypassFilter() {
         // Setup: Create user in Tenant 2
-        createUser("TENANT_2", "user2@t2.com", Role.ROLE_CLIENT);
+        createUser("TENANT_2", "user2@t2.com", Role.CLIENT);
 
         entityManager.flush();
         entityManager.clear();
@@ -138,9 +138,9 @@ public class TenantIsolationTest {
     @DisplayName("CHDEV-69: DELETE queries respect tenant filter")
     void testDeleteQueriesRespectFilter() {
         // Setup: Create 2 users in Tenant 1, 1 user in Tenant 2
-        User user1 = createUser("TENANT_1", "user1@t1.com", Role.ROLE_CLIENT);
-        createUser("TENANT_1", "user2@t1.com", Role.ROLE_CLIENT);
-        User user2tenant = createUser("TENANT_2", "user2@t2.com", Role.ROLE_CLIENT);
+        User user1 = createUser("TENANT_1", "user1@t1.com", Role.CLIENT);
+        createUser("TENANT_1", "user2@t1.com", Role.CLIENT);
+        User user2tenant = createUser("TENANT_2", "user2@t2.com", Role.CLIENT);
         UUID user1Id = user1.getId();
         UUID tenant2UserId = user2tenant.getId();
 
@@ -170,8 +170,8 @@ public class TenantIsolationTest {
     @DisplayName("CHDEV-69: Aggregate queries respect tenant filter")
     void testAggregateQueriesRespectFilter() {
         // Setup: 5 CLIENTs in Tenant 1, 3 CLIENTs in Tenant 2
-        IntStream.range(0, 5).forEach(i -> createUser("TENANT_1", "t1_" + i + "@test.com", Role.ROLE_CLIENT));
-        IntStream.range(0, 3).forEach(i -> createUser("TENANT_2", "t2_" + i + "@test.com", Role.ROLE_CLIENT));
+        IntStream.range(0, 5).forEach(i -> createUser("TENANT_1", "t1_" + i + "@test.com", Role.CLIENT));
+        IntStream.range(0, 3).forEach(i -> createUser("TENANT_2", "t2_" + i + "@test.com", Role.CLIENT));
 
         entityManager.flush();
         entityManager.clear();
@@ -180,7 +180,7 @@ public class TenantIsolationTest {
         // Execute: countByRole(CLIENT) from Tenant 1 context
         TenantContext.setTenantId("TENANT_1");
 
-        long count = userRepository.countByRole(Role.ROLE_CLIENT);
+        long count = userRepository.countByRole(Role.CLIENT);
 
         // Verify: Returns 5 (not 5+3)
         assertEquals(5, count, "Aggregate count should only include Tenant 1 records");

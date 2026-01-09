@@ -42,7 +42,8 @@ public class AuthService {
         user.setFullName(fullName);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole(Role.ROLE_CLIENT);  // Default role for registration
+        user.setRole(Role.CLIENT);  // Default role for registration
+        user.setTenantId(email);  // Use email as tenant ID for new registrations
 
         return userRepository.save(user);
     }
