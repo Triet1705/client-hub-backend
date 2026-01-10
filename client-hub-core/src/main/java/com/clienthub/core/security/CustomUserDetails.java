@@ -1,9 +1,13 @@
 package com.clienthub.core.security;
 
+import com.clienthub.core.domain.entity.User;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 public class CustomUserDetails implements UserDetails {
@@ -16,6 +20,7 @@ public class CustomUserDetails implements UserDetails {
     private final String tenantId;
     private final Collection<? extends GrantedAuthority> authorities;
 
+
     public CustomUserDetails(
             UUID id,
             String email,
@@ -24,7 +29,8 @@ public class CustomUserDetails implements UserDetails {
             boolean active,
             String tenantId,
             Collection<? extends GrantedAuthority> authorities
-    ) {
+    )
+    {
         this.id = id;
         this.email = email;
         this.password = password;
@@ -35,25 +41,32 @@ public class CustomUserDetails implements UserDetails {
     }
 
 
-    /**
-     * Get user's unique ID (UUID)
-     * Used for JWT token generation without additional DB query
-     */
+    public static CustomUserDetails build(User user) {
+        List<GrantedAuthority> authorities = Collections.singletonList(
+            new SimpleGrantedAuthority(user.getRole().name())
+        );
+
+        return new CustomUserDetails(
+            user.getId(),
+            user.getEmail(),           
+            user.getPasswordHash(),
+            user.getRole().name(),
+            user.isActive(),
+            user.getTenantId(),
+            authorities
+        );
+    }
+
+
+
     public UUID getId() {
         return id;
     }
 
-    /**
-     * Get user's email (same as username in our system)
-     */
     public String getEmail() {
         return email;
     }
 
-    /**
-     * Get user's role name (CLIENT, FREELANCER, ADMIN)
-     * Used for JWT token generation without additional DB query
-     */
     public String getRole() {
         return role;
     }
@@ -75,27 +88,26 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public String getUsername() {
-        // In our system, username = email
         return email;
     }
 
     @Override
     public boolean isAccountNonExpired() {
-        return true;  // We don't use account expiration
+        return true;
     }
 
     @Override
     public boolean isAccountNonLocked() {
-        return active;  // Locked if user is inactive
+        return active;
     }
 
     @Override
     public boolean isCredentialsNonExpired() {
-        return true;  // We don't use credential expiration
+        return true;
     }
 
     @Override
     public boolean isEnabled() {
-        return active;  // Enabled if user is active
+        return active;
     }
 }
