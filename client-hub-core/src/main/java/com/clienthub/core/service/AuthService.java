@@ -63,48 +63,52 @@ public class AuthService {
 
         return userRepository.save(user);
     }
-
-    /**
-     * Logic Refresh Token Rotation & Security Hardening
-     */
+    
+    // TODO
+    // Race Condition Risk: Concurrent refresh requests với cùng token
+    // có thể tạo ra 2 valid tokens. Solution: Optimistic Locking (@Version)
+    // hoặc Pessimistic Locking (SELECT FOR UPDATE).
+    // Priority: P2 (implement before production deployment)
+    
     @Transactional
     public JwtResponse refreshToken(String requestToken, String ipAddress, String userAgent) {
         return refreshTokenRepository.findByToken(requestToken)
-                .map(token -> {
-                    if (token.getRevoked()) {
-                        refreshTokenRepository.deleteByUser(token.getUser());
+                .map(parentToken -> {
+                    if (parentToken.getRevoked()) {
+                        refreshTokenRepository.deleteByUser(parentToken.getUser());
                         throw new TokenRefreshException(requestToken,
                                 "Security Alert: Reuse of revoked token detected. All sessions invalidated.");
                     }
-                    return token;
+                    return parentToken;
                 })
-                .map(token -> verifyExpiration(token))
-                .map(token -> {
+                .map(this::verifyExpiration) 
+                .map(parentToken -> {
+                    User user = parentToken.getUser();
 
-                    User user = token.getUser();
+                    RefreshToken childToken = createRefreshToken(user, ipAddress, userAgent);
 
-                    RefreshToken newRefreshToken = createRefreshToken(user, ipAddress, userAgent);
+                    parentToken.setRevoked(true);
+                    parentToken.setReplacedByTokenId(childToken.getId());
+                    parentToken.setLastUsedAt(Instant.now());
 
-                    token.revoke(newRefreshToken.getId());
-                    token.setLastUsedAt(Instant.now());
-                    refreshTokenRepository.save(token);
+                    refreshTokenRepository.save(parentToken);
 
                     CustomUserDetails userDetails = CustomUserDetails.build(user);
                     String newAccessToken = jwtTokenProvider.generateAccessToken(userDetails);
-
-                    long expiresIn = jwtTokenProvider.getExpirationTime() / 1000; // Convert to seconds
+                    long expiresIn = jwtTokenProvider.getExpirationTime() / 1000;
 
                     return new JwtResponse(
                             newAccessToken,
-                            newRefreshToken.getToken(),
-                            expiresIn,              // Long expiresIn (seconds)
+                            childToken.getToken(),
+                            expiresIn,
                             user.getId(),
                             user.getEmail(),
                             user.getRole().name(),
                             user.getTenantId()
                     );
                 })
-                .orElseThrow(() -> new TokenRefreshException(requestToken, "Refresh token is not in database!"));
+                .orElseThrow(() -> new TokenRefreshException(requestToken, 
+                    "Refresh token not found in database."));
     }
 
     public User getUserByEmail(String email) {
@@ -148,6 +152,5 @@ public class AuthService {
     public void purgeExpiredTokens() {
         Instant now = Instant.now();
         refreshTokenRepository.deleteAllByExpiryDateBefore(now);
-        // Cần thêm method deleteAllByExpiryDateBefore trong Repository
     }
 }

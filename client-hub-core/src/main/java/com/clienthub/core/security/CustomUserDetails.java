@@ -48,7 +48,7 @@ public class CustomUserDetails implements UserDetails {
 
         return new CustomUserDetails(
             user.getId(),
-            user.getEmail(),           
+            user.getEmail(),
             user.getPasswordHash(),
             user.getRole().name(),
             user.isActive(),
