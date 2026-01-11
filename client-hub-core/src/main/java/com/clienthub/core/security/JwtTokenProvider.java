@@ -34,6 +34,21 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Generate JWT Access Token from CustomUserDetails
+     * 
+     * @param userDetails CustomUserDetails containing user info
+     * @return JWT token string
+     */
+    public String generateAccessToken(CustomUserDetails userDetails) {
+        return generateAccessToken(
+            userDetails.getId(),
+            userDetails.getEmail(),
+            userDetails.getRole(),
+            userDetails.getTenantId()
+        );
+    }
+
+    /**
      * Generate JWT Access Token
      * 
      * @param userId User's unique identifier
@@ -50,6 +65,13 @@ public class JwtTokenProvider {
         claims.put("type", TokenType.ACCESS.getValue());
         
         return createToken(claims, userId.toString(), jwtExpirationMs);
+    }
+
+    /**
+     * Get JWT expiration time in milliseconds
+     */
+    public long getExpirationTime() {
+        return jwtExpirationMs;
     }
 
     /**

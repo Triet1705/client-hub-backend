@@ -1,15 +1,15 @@
 package com.clienthub.api.controller;
 
-import com.clienthub.api.dto.auth.JwtResponse;
-import com.clienthub.api.dto.auth.LoginRequest;
-import com.clienthub.api.dto.auth.RegisterRequest;
-import com.clienthub.api.dto.auth.RegisterResponse;
+import com.clienthub.api.dto.auth.*;
 import com.clienthub.api.dto.common.ErrorResponse;
 import com.clienthub.core.domain.entity.User;
+import com.clienthub.core.dto.JwtResponse;
+import com.clienthub.core.exception.TokenRefreshException;
 import com.clienthub.core.security.CustomUserDetails;
 import com.clienthub.core.security.JwtTokenProvider;
 import com.clienthub.core.service.AuthService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,7 +37,7 @@ public class AuthController {
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
 
-    @Value("${jwt.expiration:900000}") // 15 minutes default (in milliseconds)
+    @Value("${jwt.expiration:900000}")
     private long jwtExpirationMs;
 
     public AuthController(
@@ -60,7 +60,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         try {
-            // 1. Authenticate using Spring Security AuthenticationManager
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             loginRequest.getEmail(),
@@ -68,13 +67,10 @@ public class AuthController {
                     )
             );
 
-            // 2. Set authentication in SecurityContext
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // 3. Get CustomUserDetails from authentication principal
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 
-            // 4. Generate JWT tokens using data from CustomUserDetails
             String accessToken = jwtTokenProvider.generateAccessToken(
                     userDetails.getId(),
                     userDetails.getEmail(),
@@ -83,12 +79,10 @@ public class AuthController {
             );
             String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails.getId());
 
-            // 5. Calculate expires_in (convert milliseconds to seconds)
             Long expiresIn = jwtExpirationMs / 1000;
 
             log.info("User logged in successfully: {} (role: {})", userDetails.getEmail(), userDetails.getRole());
 
-            // 6. Return JWT response
             return ResponseEntity.ok(new JwtResponse(
                     accessToken,
                     refreshToken,
@@ -96,7 +90,7 @@ public class AuthController {
                     userDetails.getId(),
                     userDetails.getEmail(),
                     userDetails.getRole(),
-                    userDetails.getTenantId()  // ✅ Include tenantId in response
+                    userDetails.getTenantId()
             ));
 
         }catch (DisabledException e) {
@@ -139,7 +133,6 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
         try {
-            // 1. Check if email already exists
             if (authService.emailExists(registerRequest.getEmail())) {
                 log.warn("Registration attempt with existing email: {}", registerRequest.getEmail());
                 return ResponseEntity
@@ -151,7 +144,6 @@ public class AuthController {
                         ));
             }
 
-            // 2. Register new user
             User newUser = authService.registerUser(
                     registerRequest.getFullName(),
                     registerRequest.getEmail(),
@@ -160,7 +152,6 @@ public class AuthController {
 
             log.info("New user registered: {} (id: {})", newUser.getEmail(), newUser.getId());
 
-            // 3. Return success response
             return ResponseEntity
                     .status(HttpStatus.CREATED)
                     .body(new RegisterResponse(
@@ -187,6 +178,29 @@ public class AuthController {
                             "Registration Failed",
                             "An error occurred during registration. Please try again.",
                             HttpStatus.INTERNAL_SERVER_ERROR.value()
+                    ));
+        }
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest,
+                                          HttpServletRequest servletRequest) {
+        try {
+            String ipAddress = servletRequest.getRemoteAddr();
+            String userAgent = servletRequest.getHeader("User-Agent");
+
+            JwtResponse response = authService.refreshToken(
+                    refreshTokenRequest.getRefreshToken(),
+                    ipAddress,
+                    userAgent
+            );
+            return ResponseEntity.ok(response);
+        } catch (TokenRefreshException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse(
+                            "Token Refresh Failed",
+                            e.getMessage(),
+                            HttpStatus.FORBIDDEN.value()
                     ));
         }
     }
