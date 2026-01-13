@@ -54,7 +54,7 @@ public class Project extends BaseEntity {
     }
 
     public Project (String tenantId, String title, String description, BigDecimal budget, ProjectStatus status, LocalDate deadline, User owner) {
-        this.setTenantId(tenantId);  // Use setter from BaseEntity
+        this.setTenantId(tenantId);
         this.title = title;
         this.description = description;
         this.budget = budget;
