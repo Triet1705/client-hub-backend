@@ -31,10 +31,10 @@ public class ProjectMapperImpl implements ProjectMapper {
         }
         
         if (project.getCreatedAt() != null) {
-            response.setCreatedAt(project.getCreatedAt().toInstant(ZoneOffset.UTC));
+            response.setCreatedAt(project.getCreatedAt());
         }
-        if (project.getUpdateAt() != null) {
-            response.setUpdatedAt(project.getUpdateAt().toInstant(ZoneOffset.UTC));
+        if (project.getUpdatedAt() != null) {
+            response.setUpdatedAt(project.getUpdatedAt());
         }
         
         return response;

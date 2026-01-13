@@ -38,10 +38,10 @@ public class InvoiceMapperImpl implements InvoiceMapper {
         }
 
         if (invoice.getCreatedAt() != null) {
-            response.setCreatedAt(invoice.getCreatedAt().toInstant(java.time.ZoneOffset.UTC));
+            response.setCreatedAt(invoice.getCreatedAt());
         }
-        if (invoice.getUpdateAt() != null) {
-            response.setUpdatedAt(invoice.getUpdateAt().toInstant(java.time.ZoneOffset.UTC));
+        if (invoice.getUpdatedAt() != null) {
+            response.setUpdatedAt(invoice.getUpdatedAt());
         }
 
         return response;
