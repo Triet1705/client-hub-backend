@@ -82,9 +82,9 @@ public class UserService {
      */
     private UserSummaryDto toSummaryDTO(User user) {
         // TODO: Replace with real lastLoginAt field when available
-        java.time.Instant lastLogin = user.getUpdateAt() != null 
-            ? user.getUpdateAt().atZone(java.time.ZoneId.systemDefault()).toInstant()
-            : user.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant();
+        java.time.Instant lastLogin = user.getUpdatedAt() != null 
+            ? user.getUpdatedAt()
+            : user.getCreatedAt();
             
         return new UserSummaryDto(
             user.getId(),

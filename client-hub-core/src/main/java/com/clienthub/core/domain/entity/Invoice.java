@@ -20,6 +20,9 @@ public class Invoice extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "tenant_id", nullable = false)
+    private String tenantId;
+
     @Column(nullable = false)
     private String title;
 
@@ -50,7 +53,7 @@ public class Invoice extends BaseEntity {
     private User freelancer;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_method")
+    @Column(name = "payment_method", nullable = false)
     private PaymentMethod paymentMethod = PaymentMethod.FIAT;
 
     @Column(name = "wallet_address")

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Audit fields
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    update_at TIMESTAMP,
+    updated_at TIMESTAMP,
     created_by VARCHAR(100),
     last_modified_by VARCHAR(100),
     
