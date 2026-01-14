@@ -45,7 +45,7 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false)
     private Boolean revoked = false;
 
-    @Column(name = "replaced_by_token_id")
+    @Column(name = "replaced_by_token_id", columnDefinition = "uuid")
     private UUID replacedByTokenId;
 
     @Column(name = "last_used_at")
