@@ -45,6 +45,18 @@ public class User extends BaseEntity {
     @Column(name = "wallet_address", unique = true)
     private String walletAddress;
 
+    @Column(name = "failed_login_attempts")
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "account_locked_until")
+    private java.time.Instant accountLockedUntil;
+
+    @Column(name = "last_login_at")
+    private java.time.Instant lastLoginAt;
+
+    @Column(name = "last_login_ip")
+    private String lastLoginIp;
+
     //CONSTRUCTOR
     public User(){
     }
@@ -58,6 +70,8 @@ public class User extends BaseEntity {
         this.role = role;
         this.active = active;
         this.walletAddress = walletAddress;
+        this.failedLoginAttempts = 0;
+        this.accountLockedUntil = null;
     }
 
     public UUID getId() {
@@ -118,6 +132,42 @@ public class User extends BaseEntity {
 
     public void setWalletAddress(String walletAddress) {
         this.walletAddress = walletAddress;
+    }
+
+    public Integer getFailedLoginAttempts() {
+        return failedLoginAttempts;
+    }
+
+    public void setFailedLoginAttempts(Integer failedLoginAttempts) {
+        this.failedLoginAttempts = failedLoginAttempts;
+    }
+
+    public java.time.Instant getAccountLockedUntil() {
+        return accountLockedUntil;
+    }
+
+    public void setAccountLockedUntil(java.time.Instant accountLockedUntil) {
+        this.accountLockedUntil = accountLockedUntil;
+    }
+
+    public java.time.Instant getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(java.time.Instant lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
+    }
+
+    public String getLastLoginIp() {
+        return lastLoginIp;
+    }
+
+    public void setLastLoginIp(String lastLoginIp) {
+        this.lastLoginIp = lastLoginIp;
+    }
+
+    public boolean isAccountLocked() {
+        return accountLockedUntil != null && accountLockedUntil.isAfter(java.time.Instant.now());
     }
 
     //BUILDER PATTERN
