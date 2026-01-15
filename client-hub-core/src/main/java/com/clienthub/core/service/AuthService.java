@@ -19,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -62,6 +61,22 @@ public class AuthService {
         user.setTenantId(email);
 
         return userRepository.save(user);
+    }
+    @Transactional
+    public void logout(String refreshTokenStr) {
+        if (refreshTokenStr == null || refreshTokenStr.isEmpty()) {
+            return;
+        }
+        refreshTokenRepository.findByToken(refreshTokenStr)
+                .ifPresent(token -> {
+                    token.setRevoked(true);
+                    refreshTokenRepository.save(token);
+                });
+    }
+
+    @Transactional
+    public RefreshToken createRefreshTokenForUser(User user, String ipAddress, String userAgent) {
+        return createRefreshToken(user, ipAddress, userAgent);
     }
     
     // TODO
@@ -152,5 +167,23 @@ public class AuthService {
     public void purgeExpiredTokens() {
         Instant now = Instant.now();
         refreshTokenRepository.deleteAllByExpiryDateBefore(now);
+    }
+
+    @Transactional
+    public void unlockAccount(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
+        
+        if (user.getAccountLockedUntil() != null || user.getFailedLoginAttempts() > 0) {
+            user.setAccountLockedUntil(null);
+            user.setFailedLoginAttempts(0);
+            userRepository.save(user);
+        }
+    }
+
+    public boolean isAccountLocked(String email) {
+        return userRepository.findByEmail(email)
+                .map(User::isAccountLocked)
+                .orElse(false);
     }
 }

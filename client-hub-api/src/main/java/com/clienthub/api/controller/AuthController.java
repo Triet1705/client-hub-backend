@@ -2,6 +2,7 @@ package com.clienthub.api.controller;
 
 import com.clienthub.api.dto.auth.*;
 import com.clienthub.api.dto.common.ErrorResponse;
+import com.clienthub.core.domain.entity.RefreshToken;
 import com.clienthub.core.domain.entity.User;
 import com.clienthub.core.dto.JwtResponse;
 import com.clienthub.core.exception.TokenRefreshException;
@@ -55,10 +56,12 @@ public class AuthController {
      * Authenticate user and return JWT tokens
      *
      * @param loginRequest Login credentials (email, password)
+     * @param request HTTP request to extract IP address and user agent
      * @return JwtResponse with access token, refresh token, and user info
      */
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
+                                              HttpServletRequest request) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -77,7 +80,12 @@ public class AuthController {
                     userDetails.getRole(),
                     userDetails.getTenantId()
             );
-            String refreshToken = jwtTokenProvider.generateRefreshToken(userDetails.getId());
+            User user = authService.getUserByEmail(userDetails.getEmail());
+
+            String ipAddress = request.getRemoteAddr();
+            String userAgent = request.getHeader("User-Agent");
+
+            RefreshToken refreshTokenEntity = authService.createRefreshTokenForUser(user, ipAddress, userAgent);
 
             Long expiresIn = jwtExpirationMs / 1000;
 
@@ -85,7 +93,7 @@ public class AuthController {
 
             return ResponseEntity.ok(new JwtResponse(
                     accessToken,
-                    refreshToken,
+                    refreshTokenEntity.getToken(),
                     expiresIn,
                     userDetails.getId(),
                     userDetails.getEmail(),
@@ -203,5 +211,26 @@ public class AuthController {
                             HttpStatus.FORBIDDEN.value()
                     ));
         }
+    }
+
+    /**
+     * POST /api/auth/logout
+     * Logout user by revoking their refresh token
+     * CHDEV-101: Logout Endpoint
+     *
+     * @param request Refresh token to revoke
+     * @return Success message
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<?> logoutUser(@Valid @RequestBody RefreshTokenRequest request) {
+        authService.logout(request.getRefreshToken());
+
+        log.info("User logged out successfully");
+
+        return ResponseEntity.ok(new ErrorResponse(
+                "Logout Successful",
+                "You have been logged out successfully.",
+                HttpStatus.OK.value()
+        ));
     }
 }
