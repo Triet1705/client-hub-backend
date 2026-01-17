@@ -20,6 +20,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+import java.util.UUID;
+
 @Service
 public class UserService {
 
@@ -61,6 +64,41 @@ public class UserService {
 
             return users.map(this::toSummaryDTO);
 
+        } finally {
+            if (wasFilterEnabled) {
+                String currentTenant = TenantContext.getTenantId();
+                if (currentTenant != null) {
+                    session.enableFilter("tenantFilter")
+                           .setParameter("tenantId", currentTenant);
+                    log.debug("Tenant filter re-enabled with tenantId: {}", currentTenant);
+                } else {
+                    session.enableFilter("tenantFilter");
+                    log.warn("Tenant filter re-enabled without tenantId parameter - context missing!");
+                }
+            }
+        }
+    }
+
+    /**
+     * Find user by ID (system-wide, ignores tenant filter)
+     * Required for Admin Impersonation feature to access users across all tenants
+     * 
+     * @param userId User's unique identifier
+     * @return Optional containing User if found
+     */
+    @Transactional(readOnly = true)
+    public Optional<User> findById(UUID userId) {
+        Session session = entityManager.unwrap(Session.class);
+        Filter tenantFilter = session.getEnabledFilter("tenantFilter");
+        
+        boolean wasFilterEnabled = (tenantFilter != null);
+        if (wasFilterEnabled) {
+            session.disableFilter("tenantFilter");
+            log.debug("Tenant filter disabled for admin findById query - userId: {}", userId);
+        }
+
+        try {
+            return userRepository.findById(userId);
         } finally {
             if (wasFilterEnabled) {
                 String currentTenant = TenantContext.getTenantId();

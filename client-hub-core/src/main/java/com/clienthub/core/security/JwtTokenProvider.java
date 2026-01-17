@@ -2,6 +2,8 @@ package com.clienthub.core.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +17,9 @@ import java.util.function.Function;
 
 @Component
 public class JwtTokenProvider {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
+    private static final String CLAIM_IMPERSONATOR_ID = "impersonator_id";
 
     @Value("${jwt.secret:default_secret_key_must_be_at_least_32_characters_long_for_hs256}")
     private String jwtSecret;
@@ -35,23 +40,21 @@ public class JwtTokenProvider {
 
     /**
      * Generate JWT Access Token from CustomUserDetails
-     * 
-     * @param userDetails CustomUserDetails containing user info
+     * * @param userDetails CustomUserDetails containing user info
      * @return JWT token string
      */
     public String generateAccessToken(CustomUserDetails userDetails) {
         return generateAccessToken(
-            userDetails.getId(),
-            userDetails.getEmail(),
-            userDetails.getRole(),
-            userDetails.getTenantId()
+                userDetails.getId(),
+                userDetails.getEmail(),
+                userDetails.getRole(),
+                userDetails.getTenantId()
         );
     }
 
     /**
      * Generate JWT Access Token
-     * 
-     * @param userId User's unique identifier
+     * * @param userId User's unique identifier
      * @param email User's email
      * @param role User's role (FREELANCER, CLIENT, ADMIN)
      * @return JWT token string
@@ -63,8 +66,32 @@ public class JwtTokenProvider {
         claims.put("role", role);
         claims.put("tenantId", tenantId);
         claims.put("type", TokenType.ACCESS.getValue());
-        
+
         return createToken(claims, userId.toString(), jwtExpirationMs);
+    }
+
+    /**
+     * Generate Impersonation Token (For Admin Support)
+     * * @param targetUserId The user ID being impersonated
+     * @param targetEmail The user email being impersonated
+     * @param targetRole The user role
+     * @param targetTenantId The user tenant
+     * @param adminId The ID of the Admin performing the impersonation
+     * @return JWT token string with impersonator claim
+     */
+    public String generateImpersonationToken(UUID targetUserId, String targetEmail, String targetRole, String targetTenantId, UUID adminId) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", targetUserId.toString());
+        claims.put("email", targetEmail);
+        claims.put("role", targetRole);
+        claims.put("tenantId", targetTenantId);
+        claims.put("type", TokenType.ACCESS.getValue());
+
+        claims.put(CLAIM_IMPERSONATOR_ID, adminId.toString());
+
+        logger.warn("Security Alert: Generating Impersonation Token. Admin {} is impersonating User {}", adminId, targetUserId);
+
+        return createToken(claims, targetUserId.toString(), jwtExpirationMs);
     }
 
     /**
@@ -76,14 +103,13 @@ public class JwtTokenProvider {
 
     /**
      * Generate JWT Refresh Token (longer expiration)
-     * 
-     * @param userId User's unique identifier
+     * * @param userId User's unique identifier
      * @return Refresh token string
      */
     public String generateRefreshToken(UUID userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("type", TokenType.REFRESH.getValue());
-        
+
         return createToken(claims, userId.toString(), refreshExpirationMs);
     }
 
@@ -130,6 +156,15 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Extract Impersonator ID if exists
+     * Used for Audit Logging to trace actions back to the Admin
+     */
+    public UUID extractImpersonatorId(String token) {
+        String impersonatorIdStr = extractClaim(token, claims -> claims.get(CLAIM_IMPERSONATOR_ID, String.class));
+        return impersonatorIdStr != null ? UUID.fromString(impersonatorIdStr) : null;
+    }
+
+    /**
      * Extract token type from token claims
      */
     public TokenType extractTokenType(String token) {
@@ -172,8 +207,7 @@ public class JwtTokenProvider {
 
     /**
      * Validate token against user details
-     * 
-     * @param token JWT token string
+     * * @param token JWT token string
      * @param userId Expected user ID
      * @return true if token is valid and matches user
      */
@@ -183,6 +217,7 @@ public class JwtTokenProvider {
             return (extractedUserId.equals(userId) && !isTokenExpired(token));
         } catch (JwtException | IllegalArgumentException e) {
             // Token validation failed (signature invalid, malformed, expired, etc.)
+            logger.error("Token validation failed: {}", e.getMessage());
             return false;
         }
     }
