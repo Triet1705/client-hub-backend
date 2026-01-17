@@ -4,6 +4,7 @@ import com.clienthub.common.context.TenantContext;
 import com.clienthub.core.domain.entity.Project;
 import com.clienthub.core.domain.entity.Task;
 import com.clienthub.core.domain.entity.User;
+import com.clienthub.core.domain.enums.Role;
 import com.clienthub.core.domain.enums.TaskStatus;
 import com.clienthub.core.dto.task.TaskRequest;
 import com.clienthub.core.dto.task.TaskResponse;
@@ -107,18 +108,15 @@ public class TaskService {
     public TaskResponse createTask(TaskRequest request) {
         String tenantId = getValidatedTenantId();
 
-        // Fetch and validate project with tenant isolation
         Project project = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
 
         validateProjectTenant(project, tenantId);
 
-        // Convert DTO to entity
         Task task = taskMapper.toEntity(request);
         task.setProject(project);
         task.setTenantId(tenantId);
 
-        // Handle optional assignee
         if (request.getAssignedToId() != null) {
             User assignee = userRepository.findById(request.getAssignedToId())
                     .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
@@ -189,21 +187,30 @@ public class TaskService {
      * @throws TaskNotFoundException if task not found
      * @throws InvalidTaskStateException if status transition is invalid
      */
-    public TaskResponse updateTask(UUID taskId, TaskRequest request) {
+    public TaskResponse updateTask(UUID taskId, TaskRequest request, UUID currentUserId) {
         String tenantId = getValidatedTenantId();
 
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
-        // Validate status transition if status is being changed
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", currentUserId));
+
+        boolean isProjectOwner = task.getProject().getOwner().getId().equals(currentUserId);
+        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUserId);
+        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
+
+        if (!isProjectOwner && !isAssignee && !isAdmin) {
+            logger.warn("SECURITY: User {} attempted to update task {} without permission", currentUserId, taskId);
+            throw new AccessDeniedException("Only Project Owner or Assignee can update this task.");
+        }
+
         if (request.getStatus() != null && task.getStatus() != request.getStatus()) {
             validateStatusTransition(task, request.getStatus());
         }
 
-        // Update task fields
         taskMapper.updateEntityFromRequest(request, task);
 
-        // Handle project change (must be in same tenant)
         if (request.getProjectId() != null && !task.getProject().getId().equals(request.getProjectId())) {
             Project newProject = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
                     .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
@@ -212,7 +219,6 @@ public class TaskService {
             task.setProject(newProject);
         }
 
-        // Handle assignee change (must be in same tenant)
         if (request.getAssignedToId() != null) {
             if (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(request.getAssignedToId())) {
                 User newAssignee = userRepository.findById(request.getAssignedToId())
@@ -285,7 +291,6 @@ public class TaskService {
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
-        // Soft delete is handled by @SQLDelete annotation on Task entity
         taskRepository.delete(task);
 
         logger.info("[AUDIT] Task soft-deleted: id={}, title='{}', tenant={}",

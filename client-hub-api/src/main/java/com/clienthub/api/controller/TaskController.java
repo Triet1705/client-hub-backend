@@ -3,6 +3,7 @@ package com.clienthub.api.controller;
 import com.clienthub.core.domain.enums.TaskStatus;
 import com.clienthub.core.dto.task.TaskRequest;
 import com.clienthub.core.dto.task.TaskResponse;
+import com.clienthub.core.security.CustomUserDetails;
 import com.clienthub.core.service.TaskService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -12,6 +13,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -96,9 +98,10 @@ public class TaskController {
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
     public ResponseEntity<TaskResponse> updateTask(
             @PathVariable UUID id,
-            @Valid @RequestBody TaskRequest request) {
+            @Valid @RequestBody TaskRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
 
-        TaskResponse response = taskService.updateTask(id, request);
+        TaskResponse response = taskService.updateTask(id, request, userDetails.getId());
         return ResponseEntity.ok(response);
     }
 

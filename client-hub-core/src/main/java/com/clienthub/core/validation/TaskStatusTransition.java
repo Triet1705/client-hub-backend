@@ -16,7 +16,6 @@ public class TaskStatusTransition {
     private static final Map<TaskStatus, Set<TaskStatus>> ALLOWED_TRANSITIONS = new EnumMap<>(TaskStatus.class);
 
     static {
-        // Define allowed state transitions
         ALLOWED_TRANSITIONS.put(TaskStatus.TODO, EnumSet.of(
                 TaskStatus.IN_PROGRESS,
                 TaskStatus.CANCELED
@@ -29,11 +28,11 @@ public class TaskStatusTransition {
         ));
 
         ALLOWED_TRANSITIONS.put(TaskStatus.DONE, EnumSet.of(
-                TaskStatus.IN_PROGRESS  // Can reopen if needed
+                TaskStatus.IN_PROGRESS
         ));
 
         ALLOWED_TRANSITIONS.put(TaskStatus.CANCELED, EnumSet.of(
-                TaskStatus.TODO         // Can reactivate canceled tasks
+                TaskStatus.TODO
         ));
     }
 
@@ -49,7 +48,6 @@ public class TaskStatusTransition {
             return false;
         }
 
-        // Same status is always allowed (no-op)
         if (currentStatus == newStatus) {
             return true;
         }
