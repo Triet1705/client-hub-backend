@@ -33,7 +33,7 @@ public class AdminControllerTest {
         mockMvc.perform(get("/api/admin/dashboard"))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("Authorize"))
+                .andExpect(jsonPath("$.status").value("Authorized"))
                 .andExpect(jsonPath("$.message").value("Welcome to Admin Dashboard"));
     }
 
