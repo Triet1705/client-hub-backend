@@ -14,7 +14,7 @@
     <groupId>com.clienthub</groupId>
     <artifactId>client-hub-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <packaging>pom</packaging> <!-- Quan trọng: Đánh dấu đây là dự án cha -->
+    <packaging>pom</packaging> 
     
     <name>client-hub-backend</name>
     <description>Modular Monolith Backend for Client Hub</description>
@@ -41,10 +41,8 @@
         <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
-    <!-- Quản lý phiên bản tập trung -->
     <dependencyManagement>
         <dependencies>
-            <!-- Internal Modules -->
             <dependency>
                 <groupId>com.clienthub</groupId>
                 <artifactId>client-hub-common</artifactId>
@@ -61,7 +59,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- External Libs -->
             <dependency>
                 <groupId>org.web3j</groupId>
                 <artifactId>core</artifactId>
@@ -78,7 +75,6 @@
                 <version>${springdoc.version}</version>
             </dependency>
             
-            <!-- JJWT (JWT Token Library) -->
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-api</artifactId>
@@ -100,13 +96,11 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- Lombok dùng chung cho tất cả module -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
-        <!-- Testing dùng chung -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -141,7 +135,6 @@
 
     <build>
         <plugins>
-            <!-- Compiler plugin với annotation processors -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -167,7 +160,14 @@
                     <release>${java.version}</release>
                 </configuration>
             </plugin>
-            <!-- Spotless format code tự động -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <argLine>-Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

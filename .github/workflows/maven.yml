@@ -11,6 +11,10 @@ jobs:
     name: Build & Verify (Java 21)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
 
     # Service Container: Giả lập Database cho Integration Test
     services:

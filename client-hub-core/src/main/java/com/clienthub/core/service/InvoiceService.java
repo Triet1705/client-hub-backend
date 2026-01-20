@@ -51,6 +51,7 @@ public class InvoiceService {
                 .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
 
         User freelancer = userRepository.findById(freelancerId)
+                .filter(u -> u.getTenantId().equals(tenantId))
                 .orElseThrow(() -> new ResourceNotFoundException("Freelancer profile not found"));
 
         Invoice invoice = invoiceMapper.toEntity(request);
