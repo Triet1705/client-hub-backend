@@ -1,9 +1,11 @@
 package com.clienthub.core.service;
 
 import com.clienthub.common.context.TenantContext;
+import com.clienthub.core.aop.LogAudit;
 import com.clienthub.core.domain.entity.Project;
 import com.clienthub.core.domain.entity.Task;
 import com.clienthub.core.domain.entity.User;
+import com.clienthub.core.domain.enums.AuditAction;
 import com.clienthub.core.domain.enums.Role;
 import com.clienthub.core.domain.enums.TaskStatus;
 import com.clienthub.core.dto.task.TaskRequest;
@@ -27,10 +29,6 @@ import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
-/**
- * Service layer for Task management with tenant isolation and business logic validation.
- * Implements multi-tenancy security, state machine validation, and audit logging.
- */
 @Service
 @Transactional
 public class TaskService {
@@ -52,12 +50,6 @@ public class TaskService {
         this.taskMapper = taskMapper;
     }
 
-    /**
-     * Validates and retrieves the current tenant ID from security context.
-     * 
-     * @return validated tenant ID
-     * @throws IllegalStateException if tenant context is not set
-     */
     private String getValidatedTenantId() {
         String tenantId = TenantContext.getTenantId();
         if (!StringUtils.hasText(tenantId)) {
@@ -67,44 +59,19 @@ public class TaskService {
         return tenantId;
     }
 
-    /**
-     * Validates that a user belongs to the expected tenant.
-     * 
-     * @param user the user to validate
-     * @param expectedTenantId the expected tenant ID
-     * @throws AccessDeniedException if user belongs to a different tenant
-     */
     private void validateUserTenant(User user, String expectedTenantId) {
         if (!expectedTenantId.equals(user.getTenantId())) {
-            logger.warn("SECURITY: Attempt to assign user {} from tenant {} to task in tenant {}",
-                    user.getId(), user.getTenantId(), expectedTenantId);
             throw new AccessDeniedException("Cannot assign users from different tenants");
         }
     }
 
-    /**
-     * Validates that a project belongs to the expected tenant.
-     * 
-     * @param project the project to validate
-     * @param expectedTenantId the expected tenant ID
-     * @throws AccessDeniedException if project belongs to a different tenant
-     */
     private void validateProjectTenant(Project project, String expectedTenantId) {
         if (!expectedTenantId.equals(project.getTenantId())) {
-            logger.warn("SECURITY: Attempt to create task in project {} from tenant {} using tenant {}",
-                    project.getId(), project.getTenantId(), expectedTenantId);
             throw new AccessDeniedException("Cannot create tasks in projects from different tenants");
         }
     }
 
-    /**
-     * Creates a new task with multi-tenancy isolation.
-     * 
-     * @param request the task creation request
-     * @return the created task response
-     * @throws ResourceNotFoundException if project or assigned user not found
-     * @throws AccessDeniedException if tenant mismatch detected
-     */
+    @LogAudit(action = AuditAction.CREATE, entityType = "TASK", entityId = "#result.id")
     public TaskResponse createTask(TaskRequest request) {
         String tenantId = getValidatedTenantId();
 
@@ -120,32 +87,19 @@ public class TaskService {
         if (request.getAssignedToId() != null) {
             User assignee = userRepository.findById(request.getAssignedToId())
                     .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
-            
+
             validateUserTenant(assignee, tenantId);
             task.setAssignedTo(assignee);
         }
 
         Task savedTask = taskRepository.save(task);
-
-        logger.info("[AUDIT] Task created: id={}, title='{}', project={}, tenant={}",
-                savedTask.getId(), savedTask.getTitle(), project.getId(), tenantId);
-
+        // Removed manual audit logger
         return taskMapper.toResponse(savedTask);
     }
 
-    /**
-     * Retrieves all tasks for the current tenant with optional filters.
-     * 
-     * @param projectId optional project filter
-     * @param status optional status filter
-     * @param assignedToId optional assignee filter
-     * @param pageable pagination information
-     * @return page of task responses
-     */
     @Transactional(readOnly = true)
     public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, UUID assignedToId, Pageable pageable) {
         String tenantId = getValidatedTenantId();
-
         Page<Task> tasks;
 
         if (projectId != null && status != null) {
@@ -161,35 +115,17 @@ public class TaskService {
         return tasks.map(taskMapper::toResponse);
     }
 
-    /**
-     * Retrieves a single task by ID with tenant isolation.
-     * 
-     * @param taskId the task ID
-     * @return the task response
-     * @throws TaskNotFoundException if task not found or belongs to different tenant
-     */
     @Transactional(readOnly = true)
     public TaskResponse getTaskById(UUID taskId) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
-
         return taskMapper.toResponse(task);
     }
 
-    /**
-     * Updates an existing task with validation and tenant isolation.
-     * 
-     * @param taskId the task ID to update
-     * @param request the update request
-     * @return the updated task response
-     * @throws TaskNotFoundException if task not found
-     * @throws InvalidTaskStateException if status transition is invalid
-     */
+    @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse updateTask(UUID taskId, TaskRequest request, UUID currentUserId) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
@@ -201,7 +137,6 @@ public class TaskService {
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
 
         if (!isProjectOwner && !isAssignee && !isAdmin) {
-            logger.warn("SECURITY: User {} attempted to update task {} without permission", currentUserId, taskId);
             throw new AccessDeniedException("Only Project Owner or Assignee can update this task.");
         }
 
@@ -214,7 +149,6 @@ public class TaskService {
         if (request.getProjectId() != null && !task.getProject().getId().equals(request.getProjectId())) {
             Project newProject = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
                     .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
-            
             validateProjectTenant(newProject, tenantId);
             task.setProject(newProject);
         }
@@ -223,90 +157,45 @@ public class TaskService {
             if (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(request.getAssignedToId())) {
                 User newAssignee = userRepository.findById(request.getAssignedToId())
                         .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
-                
                 validateUserTenant(newAssignee, tenantId);
                 task.setAssignedTo(newAssignee);
             }
         }
 
         Task updatedTask = taskRepository.save(task);
-
-        logger.info("[AUDIT] Task updated: id={}, title='{}', tenant={}",
-                updatedTask.getId(), updatedTask.getTitle(), tenantId);
-
         return taskMapper.toResponse(updatedTask);
     }
 
-    /**
-     * Updates only the status of a task with state machine validation.
-     * 
-     * @param taskId the task ID
-     * @param newStatus the new status
-     * @return the updated task response
-     * @throws InvalidTaskStateException if transition is not allowed
-     */
+    @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
         validateStatusTransition(task, newStatus);
-
-        TaskStatus oldStatus = task.getStatus();
         task.setStatus(newStatus);
 
         Task updatedTask = taskRepository.save(task);
-
-        logger.info("[AUDIT] Task status changed: id={}, {} -> {}, tenant={}",
-                taskId, oldStatus, newStatus, tenantId);
-
         return taskMapper.toResponse(updatedTask);
     }
 
-    /**
-     * Validates task status transition using the state machine.
-     * 
-     * @param task the task to validate
-     * @param newStatus the requested new status
-     * @throws InvalidTaskStateException if transition is not allowed
-     */
     private void validateStatusTransition(Task task, TaskStatus newStatus) {
         if (!TaskStatusTransition.isTransitionAllowed(task.getStatus(), newStatus)) {
-            logger.warn("Invalid task status transition: task={}, {} -> {}",
-                    task.getId(), task.getStatus(), newStatus);
             throw new InvalidTaskStateException(task.getId(), task.getStatus(), newStatus);
         }
     }
 
-    /**
-     * Soft deletes a task (sets isDeleted flag).
-     * 
-     * @param taskId the task ID to delete
-     * @throws TaskNotFoundException if task not found
-     */
+    @LogAudit(action = AuditAction.DELETE, entityType = "TASK", entityId = "#taskId")
     public void deleteTask(UUID taskId) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
-
         taskRepository.delete(task);
-
-        logger.info("[AUDIT] Task soft-deleted: id={}, title='{}', tenant={}",
-                taskId, task.getTitle(), tenantId);
     }
 
-    /**
-     * Assigns a task to a user with tenant validation.
-     * 
-     * @param taskId the task ID
-     * @param userId the user ID to assign to
-     * @return the updated task response
-     */
+    @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse assignTask(UUID taskId, UUID userId) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
@@ -317,31 +206,17 @@ public class TaskService {
 
         task.setAssignedTo(assignee);
         Task updatedTask = taskRepository.save(task);
-
-        logger.info("[AUDIT] Task assigned: id={}, assignee={}, tenant={}",
-                taskId, userId, tenantId);
-
         return taskMapper.toResponse(updatedTask);
     }
 
-    /**
-     * Unassigns a task (removes assignee).
-     * 
-     * @param taskId the task ID
-     * @return the updated task response
-     */
+    @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse unassignTask(UUID taskId) {
         String tenantId = getValidatedTenantId();
-
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
         task.setAssignedTo(null);
         Task updatedTask = taskRepository.save(task);
-
-        logger.info("[AUDIT] Task unassigned: id={}, tenant={}",
-                taskId, tenantId);
-
         return taskMapper.toResponse(updatedTask);
     }
 }
