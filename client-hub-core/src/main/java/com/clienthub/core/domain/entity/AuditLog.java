@@ -25,6 +25,7 @@ public class AuditLog {
     @Column(name = "tenant_id", nullable = false, length = 50)
     private String tenantId;
 
+    @JdbcTypeCode(SqlTypes.OTHER)
     @Column(name = "user_id", columnDefinition = "uuid")
     private UUID userId;
 
