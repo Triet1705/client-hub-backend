@@ -28,7 +28,6 @@ public class CustomPostgreSQLDialect extends PostgreSQLDialect {
             int scale,
             org.hibernate.type.descriptor.jdbc.spi.JdbcTypeRegistry jdbcTypeRegistry) {
         
-        // Force uuid column type to use PostgreSQL native UUID (Types.OTHER)
         if ("uuid".equalsIgnoreCase(columnTypeName)) {
             return jdbcTypeRegistry.getDescriptor(Types.OTHER);
         }
@@ -41,7 +40,6 @@ public class CustomPostgreSQLDialect extends PostgreSQLDialect {
                           org.hibernate.service.ServiceRegistry serviceRegistry) {
         super.contribute(typeContributions, serviceRegistry);
         
-        // Register native UUID handling for Types.OTHER
         typeContributions.getTypeConfiguration()
                 .getJdbcTypeRegistry()
                 .addDescriptor(Types.OTHER, UUIDJdbcType.INSTANCE);

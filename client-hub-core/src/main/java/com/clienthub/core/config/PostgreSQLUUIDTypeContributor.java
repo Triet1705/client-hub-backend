@@ -18,7 +18,6 @@ public class PostgreSQLUUIDTypeContributor implements TypeContributor {
 
     @Override
     public void contribute(TypeContributions typeContributions, ServiceRegistry serviceRegistry) {
-        // Register custom PostgreSQL UUID type for Types.OTHER
         typeContributions.getTypeConfiguration()
                 .getJdbcTypeRegistry()
                 .addDescriptor(Types.OTHER, PostgreSQLUUIDJdbcType.INSTANCE);
@@ -43,7 +42,6 @@ public class PostgreSQLUUIDTypeContributor implements TypeContributor {
                 @Override
                 protected void doBind(PreparedStatement st, X value, int index, WrapperOptions options)
                         throws SQLException {
-                    // Force setObject with Types.OTHER to use PostgreSQL native uuid
                     st.setObject(index, javaType.unwrap(value, UUID.class, options), Types.OTHER);
                 }
 

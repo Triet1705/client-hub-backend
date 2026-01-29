@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = ClientHubBackendApplication.class)
 @AutoConfigureMockMvc
 @Testcontainers
-@ActiveProfiles("test")  // Use test profile with H2
+@ActiveProfiles("test")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class CommunicationIntegrationTest {
 
@@ -81,29 +81,21 @@ public class CommunicationIntegrationTest {
         freelancer = createUser("freelancer@test.com", "Freelancer User", Role.FREELANCER);
 
         project = createProject("Web3 App", client);
-        task = createTask(project, "Implement Smart Contract", freelancer); // Assign to freelancer
+        task = createTask(project, "Implement Smart Contract", freelancer);
     }
 
     @AfterEach
     void tearDown() {
         TenantContext.setTenantId(TENANT_ID);
 
-        // Sử dụng JdbcTestUtils hoặc Native Query để xóa vật lý (Bypass Soft Delete)
-        // Thứ tự xóa quan trọng: Child -> Parent
-
-        // 1. Xóa Notifications (Không có Soft delete, nhưng phụ thuộc User)
         JdbcTestUtils.deleteFromTables(jdbcTemplate, "notifications");
 
-        // 2. Xóa Comments (Có Soft delete -> Phải dùng JDBC để xóa vật lý)
         JdbcTestUtils.deleteFromTables(jdbcTemplate, "comments");
 
-        // 3. Xóa Threads (Có Soft delete -> Phải dùng JDBC)
         JdbcTestUtils.deleteFromTables(jdbcTemplate, "communication_threads");
 
-        // 4. Xóa Tasks & Projects (Có Soft delete)
         JdbcTestUtils.deleteFromTables(jdbcTemplate, "tasks", "projects");
 
-        // 5. Xóa Users (Parent cao nhất)
         JdbcTestUtils.deleteFromTables(jdbcTemplate, "users");
 
         TenantContext.clear();
@@ -117,7 +109,6 @@ public class CommunicationIntegrationTest {
         request.setTargetId(task.getId().toString());
         request.setContent("Please prioritize gas optimization.");
 
-        // Use .with(authentication(...)) to inject CustomUserDetails
         CustomUserDetails userDetails = CustomUserDetails.build(client);
         UsernamePasswordAuthenticationToken auth = 
             new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
@@ -131,7 +122,6 @@ public class CommunicationIntegrationTest {
                 .andExpect(jsonPath("$.content", is("Please prioritize gas optimization.")))
                 .andExpect(jsonPath("$.author.email", is(client.getEmail())));
 
-        // Re-set tenant context after MockMvc request (it gets cleared after response)
         TenantContext.setTenantId(TENANT_ID);
         
         List<CommunicationThread> threads = threadRepository.findAll();
@@ -156,9 +146,8 @@ public class CommunicationIntegrationTest {
     @Test
     @DisplayName("Security: Freelancer can access assigned task comments")
     void testAccessControl_FreelancerAccess() throws Exception {
-        TenantContext.setTenantId(TENANT_ID);  // Ensure tenant context is set
+        TenantContext.setTenantId(TENANT_ID);
         
-        // Freelancer is assigned to task, should have access
         CustomUserDetails userDetails = CustomUserDetails.build(freelancer);
         UsernamePasswordAuthenticationToken auth = 
             new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
@@ -168,7 +157,7 @@ public class CommunicationIntegrationTest {
                         .with(authentication(auth))
                         .param("targetType", "TASK")
                         .param("targetId", task.getId().toString()))
-                .andExpect(status().isOk());  // 200 OK - has access
+                .andExpect(status().isOk());
     }
 
     private void authenticateUser(User user) {
