@@ -1,7 +1,6 @@
 package com.clienthub.domain.repository;
 
 import com.clienthub.common.context.TenantContext;
-import com.clienthub.core.CoreTestConfiguration;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.Task;
 import com.clienthub.domain.entity.User;
@@ -20,9 +19,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.ContextConfiguration;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -34,14 +33,10 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Integration tests for TaskRepository with focus on multi-tenancy isolation.
- * Uses Testcontainers for real PostgreSQL database testing.
- */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Testcontainers
-@Import(CoreTestConfiguration.class)
+@ContextConfiguration(classes = TestJpaConfig.class)
 class TaskRepositoryTest {
 
     @Container
