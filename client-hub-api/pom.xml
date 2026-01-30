@@ -12,10 +12,14 @@
     <artifactId>client-hub-api</artifactId>
 
     <dependencies>
-        <!-- Kết nối Core và Web3 -->
+        <!-- Clean Architecture Layers -->
         <dependency>
             <groupId>com.clienthub</groupId>
-            <artifactId>client-hub-core</artifactId>
+            <artifactId>client-hub-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.clienthub</groupId>
+            <artifactId>client-hub-infrastructure</artifactId>
         </dependency>
         <dependency>
             <groupId>com.clienthub</groupId>
