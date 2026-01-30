@@ -21,9 +21,11 @@
     
     <modules>
         <module>client-hub-common</module>
-        <module>client-hub-core</module>
+        <module>client-hub-domain</module>
+        <module>client-hub-infrastructure</module>
+        <module>client-hub-application</module>
         <module>client-hub-web3</module>
-        <module>client-hub-api</module>
+        <module>client-hub-web</module>
     </modules>
 
     <properties>
@@ -39,6 +41,9 @@
         <testcontainers.version>1.19.3</testcontainers.version>
         <spotless.version>2.41.1</spotless.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <minio.version>8.5.7</minio.version>
+        <pdfbox.version>3.0.3</pdfbox.version>
+        <hypersistence.version>3.8.3</hypersistence.version>
     </properties>
 
     <dependencyManagement>
@@ -50,7 +55,22 @@
             </dependency>
             <dependency>
                 <groupId>com.clienthub</groupId>
-                <artifactId>client-hub-core</artifactId>
+                <artifactId>client-hub-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.clienthub</groupId>
+                <artifactId>client-hub-infrastructure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.clienthub</groupId>
+                <artifactId>client-hub-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.clienthub</groupId>
+                <artifactId>client-hub-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -59,6 +79,21 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.hypersistence</groupId>
+                <artifactId>hypersistence-utils-hibernate-63</artifactId>
+                <version>${hypersistence.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.web3j</groupId>
                 <artifactId>core</artifactId>
