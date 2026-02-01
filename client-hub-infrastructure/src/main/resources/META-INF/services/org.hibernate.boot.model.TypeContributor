@@ -1,1 +1,1 @@
-com.clienthub.core.config.PostgreSQLUUIDTypeContributor
+com.clienthub.infrastructure.config.PostgreSQLUUIDTypeContributor
