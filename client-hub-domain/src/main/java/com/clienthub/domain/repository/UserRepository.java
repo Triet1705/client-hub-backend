@@ -18,12 +18,14 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, UUID>, 
                                         JpaSpecificationExecutor<User> {
 
-    long countByRole(Role role);
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role AND u.tenantId = :tenantId")
+    long countByRole(@Param("role") Role role, @Param("tenantId") String tenantId);
 
-    Page<User> findAll(Pageable pageable);
+    @Query("SELECT u FROM User u WHERE u.tenantId = :tenantId")
+    Page<User> findAllByTenantId(@Param("tenantId") String tenantId, Pageable pageable);
 
-    @Query("SELECT u FROM User u WHERE u.email = :email")
-    Optional<User> findByEmailCustom(@Param("email") String email);
+    @Query("SELECT u FROM User u WHERE u.email = :email AND u.tenantId = :tenantId")
+    Optional<User> findByEmailCustom(@Param("email") String email, @Param("tenantId") String tenantId);
 
     Optional<User> findByEmail(String email);
 
