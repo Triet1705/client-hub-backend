@@ -38,14 +38,19 @@ services:
     networks:
       - clienthub-network
     restart: unless-stopped
-    # GPU support - remove if no GPU available
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   pgadmin:
     image: dpage/pgadmin4
