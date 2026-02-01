@@ -28,6 +28,8 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -108,7 +110,7 @@ class TaskServiceTest {
         TaskRequest request = createValidTaskRequest();
 
         // When & Then
-        assertThrows(IllegalStateException.class, () -> taskService.createTask(request));
+        assertThrows(SecurityException.class, () -> taskService.createTask(request));
         verify(taskRepository, never()).save(any());
     }
 
