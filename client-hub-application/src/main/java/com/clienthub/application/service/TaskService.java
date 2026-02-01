@@ -75,7 +75,7 @@ public class TaskService extends TenantAwareService {
         task.setTenantId(tenantId);
 
         if (request.getAssignedToId() != null) {
-            User assignee = userRepository.findById(request.getAssignedToId())
+            User assignee = userRepository.findByIdAndTenantId(request.getAssignedToId(), tenantId)
                     .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
 
             validateUserTenant(assignee, tenantId);
@@ -119,7 +119,7 @@ public class TaskService extends TenantAwareService {
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", currentUserId));
 
         boolean isProjectOwner = task.getProject().getOwner().getId().equals(currentUserId);
@@ -145,7 +145,7 @@ public class TaskService extends TenantAwareService {
 
         if (request.getAssignedToId() != null) {
             if (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(request.getAssignedToId())) {
-                User newAssignee = userRepository.findById(request.getAssignedToId())
+                User newAssignee = userRepository.findByIdAndTenantId(request.getAssignedToId(), tenantId)
                         .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
                 validateUserTenant(newAssignee, tenantId);
                 task.setAssignedTo(newAssignee);
@@ -189,7 +189,7 @@ public class TaskService extends TenantAwareService {
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
-        User assignee = userRepository.findById(userId)
+        User assignee = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
 
         validateUserTenant(assignee, tenantId);

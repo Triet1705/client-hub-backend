@@ -27,6 +27,9 @@ public interface UserRepository extends JpaRepository<User, UUID>,
     @Query("SELECT u FROM User u WHERE u.email = :email AND u.tenantId = :tenantId")
     Optional<User> findByEmailCustom(@Param("email") String email, @Param("tenantId") String tenantId);
 
+    @Query("SELECT u FROM User u WHERE u.id = :id AND u.tenantId = :tenantId")
+    Optional<User> findByIdAndTenantId(@Param("id") UUID id, @Param("tenantId") String tenantId);
+
     Optional<User> findByEmail(String email);
 
     @Query(value = "SELECT * FROM users WHERE email = ?1", nativeQuery = true)

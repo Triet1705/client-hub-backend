@@ -85,7 +85,7 @@ class TaskServiceTest {
 
         when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
                 .thenReturn(Optional.of(project));
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID))
                 .thenReturn(Optional.of(assignee));
         when(taskMapper.toEntity(request)).thenReturn(task);
         when(taskRepository.save(any(Task.class))).thenReturn(task);
@@ -98,7 +98,7 @@ class TaskServiceTest {
         assertNotNull(result);
         assertEquals(expectedResponse, result);
         verify(projectRepository).findByIdAndTenantId(PROJECT_ID, TENANT_ID);
-        verify(userRepository).findById(USER_ID);
+        verify(userRepository).findByIdAndTenantId(USER_ID, TENANT_ID);
         verify(taskRepository).save(any(Task.class));
     }
 
@@ -141,7 +141,7 @@ class TaskServiceTest {
         when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
                 .thenReturn(Optional.of(project));
         when(taskMapper.toEntity(request)).thenReturn(task); // Add mapper mock
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID))
                 .thenReturn(Optional.of(assignee));
 
         // When & Then
@@ -209,7 +209,7 @@ class TaskServiceTest {
 
         when(taskRepository.findByIdAndTenantId(TASK_ID, TENANT_ID))
                 .thenReturn(Optional.of(task));
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID))
                 .thenReturn(Optional.of(assignee));
         when(taskRepository.save(task)).thenReturn(task);
         when(taskMapper.toResponse(task)).thenReturn(expectedResponse);
