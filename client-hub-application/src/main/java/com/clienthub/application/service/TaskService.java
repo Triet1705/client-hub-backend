@@ -1,6 +1,6 @@
 package com.clienthub.application.service;
 
-import com.clienthub.common.context.TenantContext;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.application.aop.LogAudit;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.Task;
@@ -25,13 +25,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
 @Service
 @Transactional
-public class TaskService {
+public class TaskService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(TaskService.class);
 
@@ -50,15 +49,6 @@ public class TaskService {
         this.taskMapper = taskMapper;
     }
 
-    private String getValidatedTenantId() {
-        String tenantId = TenantContext.getTenantId();
-        if (!StringUtils.hasText(tenantId)) {
-            logger.error("TenantContext is null or empty - Security breach attempt detected");
-            throw new IllegalStateException("Tenant context not set. Authentication required.");
-        }
-        return tenantId;
-    }
-
     private void validateUserTenant(User user, String expectedTenantId) {
         if (!expectedTenantId.equals(user.getTenantId())) {
             throw new AccessDeniedException("Cannot assign users from different tenants");
@@ -73,7 +63,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.CREATE, entityType = "TASK", entityId = "#result.id")
     public TaskResponse createTask(TaskRequest request) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
@@ -99,7 +89,7 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, UUID assignedToId, Pageable pageable) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Page<Task> tasks;
 
         if (projectId != null && status != null) {
@@ -117,7 +107,7 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public TaskResponse getTaskById(UUID taskId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
         return taskMapper.toResponse(task);
@@ -125,7 +115,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse updateTask(UUID taskId, TaskRequest request, UUID currentUserId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
@@ -168,7 +158,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
@@ -187,7 +177,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.DELETE, entityType = "TASK", entityId = "#taskId")
     public void deleteTask(UUID taskId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
         taskRepository.delete(task);
@@ -195,7 +185,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse assignTask(UUID taskId, UUID userId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
@@ -211,7 +201,7 @@ public class TaskService {
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse unassignTask(UUID taskId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 

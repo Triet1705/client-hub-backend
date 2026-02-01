@@ -1,7 +1,6 @@
-// ### File: client-hub-core/src/main/java/com/clienthub/core/service/AuditService.java
 package com.clienthub.application.service;
 
-import com.clienthub.common.context.TenantContext;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.AuditLog;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.repository.AuditLogRepository;
@@ -23,7 +22,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 @Service
-public class AuditService {
+public class AuditService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditService.class);
 
@@ -41,8 +40,10 @@ public class AuditService {
     public void log(AuditAction action, String entityType, String entityId,
                     Object oldEntity, Object newEntity, String ipAddress) {
         try {
-            String tenantId = TenantContext.getTenantId();
-            if (tenantId == null) {
+            String tenantId;
+            try {
+                tenantId = getCurrentTenantId();
+            } catch (SecurityException e) {
                 tenantId = "SYSTEM";
             }
 

@@ -1,6 +1,6 @@
 package com.clienthub.application.service;
 
-import com.clienthub.common.context.TenantContext;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.ProjectStatus;
@@ -17,13 +17,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
 @Service
 @Transactional
-public class ProjectService {
+public class ProjectService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(ProjectService.class);
 
@@ -35,15 +34,6 @@ public class ProjectService {
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.projectMapper = projectMapper;
-    }
-
-    private String getValidatedTenantId() {
-        String tenantId = TenantContext.getTenantId();
-        if (!StringUtils.hasText(tenantId)) {
-            logger.error("TenantContext is null or empty - Security breach attempt detected");
-            throw new IllegalStateException("Tenant context not set. Authentication required.");
-        }
-        return tenantId;
     }
 
     private void validateUserTenant(User user, String expectedTenantId) {
@@ -77,7 +67,7 @@ public class ProjectService {
     }
 
     public ProjectResponse createProject(ProjectRequest request, UUID userId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         User owner = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
@@ -98,7 +88,7 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public Page<ProjectResponse> getProjects(ProjectStatus status, Pageable pageable) {
-        String tenantId = getValidatedTenantId(); // MEDIUM 6: Null safety
+        String tenantId = getCurrentTenantId(); // MEDIUM 6: Null safety
 
         Page<Project> projects;
         if (status != null) {
@@ -112,7 +102,7 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectResponse getProjectById(UUID projectId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
@@ -121,7 +111,7 @@ public class ProjectService {
     }
 
     public ProjectResponse updateProject(UUID projectId, ProjectRequest request, UUID currentUserId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
@@ -147,7 +137,7 @@ public class ProjectService {
     }
 
     public void deleteProject(UUID projectId, UUID currentUserId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));

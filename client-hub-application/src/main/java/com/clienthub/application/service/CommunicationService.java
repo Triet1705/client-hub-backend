@@ -1,6 +1,6 @@
 package com.clienthub.application.service;
 
-import com.clienthub.common.context.TenantContext;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.application.aop.LogAudit;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
@@ -14,13 +14,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.util.UUID;
 
 @Service
 @Transactional
-public class CommunicationService {
+public class CommunicationService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(CommunicationService.class);
 
@@ -49,17 +48,9 @@ public class CommunicationService {
         this.userRepository = userRepository;
     }
 
-    private String getValidatedTenantId() {
-        String tenantId = TenantContext.getTenantId();
-        if (!StringUtils.hasText(tenantId)) {
-            throw new IllegalStateException("Tenant context required");
-        }
-        return tenantId;
-    }
-
     @LogAudit(action = AuditAction.CREATE, entityType = "COMMENT", entityId = "#result.id")
     public Comment postComment(CommentTargetType targetType, String targetId, String content, UUID authorId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -86,7 +77,7 @@ public class CommunicationService {
 
     @Transactional(readOnly = true)
     public Page<Comment> getComments(CommentTargetType targetType, String targetId, Pageable pageable, UUID userId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
         validateAccessAndGetRecipient(targetType, targetId, tenantId, userId);
 
         return threadRepository.findByTargetTypeAndTargetIdAndTenantId(targetType, targetId, tenantId)
@@ -96,7 +87,7 @@ public class CommunicationService {
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "COMMENT", entityId = "#commentId")
     public Comment updateComment(Long commentId, String newContent, UUID userId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Comment comment = commentRepository.findById(commentId)
                 .filter(c -> c.getTenantId().equals(tenantId))
@@ -116,7 +107,7 @@ public class CommunicationService {
 
     @LogAudit(action = AuditAction.DELETE, entityType = "COMMENT", entityId = "#commentId")
     public void deleteComment(Long commentId, UUID userId) {
-        String tenantId = getValidatedTenantId();
+        String tenantId = getCurrentTenantId();
 
         Comment comment = commentRepository.findById(commentId)
                 .filter(c -> c.getTenantId().equals(tenantId))

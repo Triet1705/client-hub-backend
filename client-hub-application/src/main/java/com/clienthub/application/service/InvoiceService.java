@@ -1,6 +1,6 @@
 package com.clienthub.application.service;
 
-import com.clienthub.common.context.TenantContext;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.Invoice;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.User;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 @Transactional
-public class InvoiceService {
+public class InvoiceService extends TenantAwareService {
 
     private final InvoiceRepository invoiceRepository;
     private final ProjectRepository projectRepository;
@@ -40,7 +40,7 @@ public class InvoiceService {
     }
 
     public InvoiceResponse createInvoice(InvoiceRequest request, UUID freelancerId) {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findById(request.getProjectId())
                 .filter(p -> p.getTenantId().equals(tenantId))
@@ -69,7 +69,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public InvoiceResponse getInvoiceById(Long id) {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = getCurrentTenantId();
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
@@ -78,7 +78,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public InvoiceResponse getInvoiceByIdWithOwnershipCheck(Long id, UUID currentUserId) {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = getCurrentTenantId();
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
@@ -101,7 +101,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<InvoiceResponse> getInvoicesByProject(UUID projectId) {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = getCurrentTenantId();
 
         if (!projectRepository.existsByIdAndTenantId(projectId, tenantId)) {
             throw new ResourceNotFoundException("Project not found or access denied");
@@ -114,7 +114,7 @@ public class InvoiceService {
     }
 
     public InvoiceResponse updateStatus(Long id, InvoiceStatus newStatus, UUID currentUserId) {
-        String tenantId = TenantContext.getTenantId();
+        String tenantId = getCurrentTenantId();
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
