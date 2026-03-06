@@ -22,9 +22,18 @@ public class TenantInterceptor implements HandlerInterceptor {
             @NonNull Object handler
     ) {
         try {
+            // If TenantContext is already set (e.g., by JwtAuthenticationFilter
+            // from JWT claims for an authenticated request), do NOT overwrite it
+            // with the X-Tenant-ID header. This prevents a client from spoofing
+            // a different tenant on authenticated requests.
+            if (TenantContext.isSet()) {
+                log.debug("TenantContext already set (from JWT): {}, skipping header override",
+                        TenantContext.getTenantId());
+                return true;
+            }
             String tenantId = extractTenantId(request);
             TenantContext.setTenantId(tenantId);
-            log.debug("Tenant context set: {}", tenantId);
+            log.debug("Tenant context set from header: {}", tenantId);
         } catch (Exception e) {
             log.error("Error setting tenant context", e);
             TenantContext.setTenantId(DEFAULT_TENANT);

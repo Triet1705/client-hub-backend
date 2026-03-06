@@ -12,13 +12,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
-@Component
 public class CustomAuthenticationProvider extends DaoAuthenticationProvider {
 
     private static final Logger log = LoggerFactory.getLogger(CustomAuthenticationProvider.class);
@@ -33,16 +31,12 @@ public class CustomAuthenticationProvider extends DaoAuthenticationProvider {
 
     public CustomAuthenticationProvider(
             UserRepository userRepository,
-            UserDetailsService userDetailsService
+            UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
         setUserDetailsService(userDetailsService);
-    }
-
-    // Spring will auto-inject PasswordEncoder through this setter
-    @Override
-    public void setPasswordEncoder(PasswordEncoder passwordEncoder) {
-        super.setPasswordEncoder(passwordEncoder);
+        setPasswordEncoder(passwordEncoder);
     }
 
     @Override

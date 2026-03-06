@@ -133,13 +133,17 @@ public class AuthController {
 
     /**
      * POST /api/auth/register
-     * Register a new user with default CLIENT role
+     * Register a new user. Role must be CLIENT or FREELANCER (ADMIN cannot self-register).
      *
-     * @param registerRequest User registration data (fullName, email, password)
+     * @param registerRequest User registration data (fullName, email, password, role)
+     * @param tenantId        Workspace / tenant identifier from X-Tenant-ID header
      * @return RegisterResponse with success message and user info
      */
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<?> registerUser(
+            @Valid @RequestBody RegisterRequest registerRequest,
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Tenant-ID", defaultValue = "default") String tenantId
+    ) {
         try {
             if (authService.emailExists(registerRequest.getEmail())) {
                 log.warn("Registration attempt with existing email: {}", registerRequest.getEmail());
@@ -155,10 +159,12 @@ public class AuthController {
             User newUser = authService.registerUser(
                     registerRequest.getFullName(),
                     registerRequest.getEmail(),
-                    registerRequest.getPassword()
+                    registerRequest.getPassword(),
+                    registerRequest.getRole(),
+                    tenantId
             );
 
-            log.info("New user registered: {} (id: {})", newUser.getEmail(), newUser.getId());
+            log.info("New user registered: {} (id: {}, role: {}, tenant: {})", newUser.getEmail(), newUser.getId(), newUser.getRole(), newUser.getTenantId());
 
             return ResponseEntity
                     .status(HttpStatus.CREATED)
