@@ -27,13 +27,22 @@ public class RegisterRequest {
     )
     private String password;
 
+    /**
+     * User-selected account type. Only CLIENT and FREELANCER are accepted on public registration.
+     * ADMIN accounts are created by existing admins only.
+     */
+    @NotBlank(message = "Role cannot be blank")
+    @Pattern(regexp = "^(CLIENT|FREELANCER)$", message = "Role must be CLIENT or FREELANCER")
+    private String role;
+
     public RegisterRequest() {
     }
 
-    public RegisterRequest(String fullName, String email, String password) {
+    public RegisterRequest(String fullName, String email, String password, String role) {
         this.fullName = fullName;
         this.email = email;
         this.password = password;
+        this.role = role;
     }
 
     public String getFullName() {
@@ -60,11 +69,20 @@ public class RegisterRequest {
         this.password = password;
     }
 
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
     @Override
     public String toString() {
         return "RegisterRequest{" +
                 "fullName='" + fullName + '\'' +
                 ", email='" + email + '\'' +
+                ", role='" + role + '\'' +
                 ", password='[PROTECTED]'" +
                 '}';
     }

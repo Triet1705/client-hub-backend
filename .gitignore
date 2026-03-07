@@ -96,3 +96,6 @@ local.properties
 
 README.md
 HELP.md
+app.log
+app.log*.gz
+*.log

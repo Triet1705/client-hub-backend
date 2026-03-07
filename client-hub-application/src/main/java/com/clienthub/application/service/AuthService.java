@@ -47,17 +47,28 @@ public class AuthService {
     }
 
     @Transactional
-    public User registerUser(String fullName, String email, String password) {
+    public User registerUser(String fullName, String email, String password, String role, String tenantId) {
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email is already registered");
+        }
+
+        Role resolvedRole;
+        try {
+            resolvedRole = Role.valueOf(role.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid role: " + role + ". Must be CLIENT or FREELANCER.");
+        }
+        // Prevent privilege escalation — ADMIN accounts cannot be self-registered
+        if (resolvedRole == Role.ADMIN) {
+            throw new IllegalArgumentException("ADMIN accounts must be created by an existing administrator.");
         }
 
         User user = new User();
         user.setFullName(fullName);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
-        user.setRole(Role.CLIENT);
-        user.setTenantId(email);
+        user.setRole(resolvedRole);
+        user.setTenantId(tenantId != null && !tenantId.isBlank() ? tenantId : "default");
 
         return userRepository.save(user);
     }

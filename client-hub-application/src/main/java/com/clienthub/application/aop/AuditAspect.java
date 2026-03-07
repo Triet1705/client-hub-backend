@@ -60,6 +60,7 @@ public class AuditAspect {
                 return request.getRemoteAddr();
             }
         } catch (Exception e) {
+            logger.warn("Could not determine client IP address: {}", e.getMessage());
         }
         return "UNKNOWN";
     }
