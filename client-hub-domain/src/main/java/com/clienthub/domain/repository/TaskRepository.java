@@ -54,4 +54,5 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
             "LEFT JOIN FETCH t.assignedTo " +
             "WHERE t.tenantId = :tenantId")
     List<Task> findAllByTenantIdWithRelations(@Param("tenantId") String tenantId);
+    long countByTenantIdAndStatusIn(String tenantId, java.util.List<TaskStatus> statuses);
 }
