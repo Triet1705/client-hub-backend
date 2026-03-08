@@ -144,4 +144,30 @@ public class InvoiceService extends TenantAwareService {
         Invoice updated = invoiceRepository.save(invoice);
         return invoiceMapper.toResponse(updated);
     }
+
+    @Transactional(readOnly = true)
+    public List<InvoiceResponse> getAllInvoices(InvoiceStatus status, UUID projectId) {
+        String tenantId = getCurrentTenantId();
+
+        List<Invoice> invoices;
+        if (projectId != null && status != null) {
+            invoices = invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
+                    .stream()
+                    .filter(i -> i.getStatus() == status)
+                    .collect(Collectors.toList());
+        } else if (projectId != null) {
+            if (!projectRepository.existsByIdAndTenantId(projectId, tenantId)) {
+                throw new ResourceNotFoundException("Project not found or access denied");
+            }
+            invoices = invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId);
+        } else if (status != null) {
+            invoices = invoiceRepository.findByTenantIdAndStatus(tenantId, status);
+        } else {
+            invoices = invoiceRepository.findByTenantId(tenantId);
+        }
+
+        return invoices.stream()
+                .map(invoiceMapper::toResponse)
+                .collect(Collectors.toList());
+    }
 }

@@ -57,4 +57,12 @@ public class InvoiceController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         return ResponseEntity.ok(invoiceService.updateStatus(id, status, currentUser.getId()));
     }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<List<InvoiceResponse>> getAllInvoices(
+            @RequestParam(required = false) InvoiceStatus status,
+            @RequestParam(required = false) UUID projectId) {
+        return ResponseEntity.ok(invoiceService.getAllInvoices(status, projectId));
+    }
 }
