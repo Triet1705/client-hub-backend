@@ -3,6 +3,7 @@ package com.clienthub.web.controller;
 import com.clienthub.domain.enums.TaskStatus;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
+import com.clienthub.application.dto.task.TaskSummaryResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.application.service.TaskService;
 import jakarta.validation.Valid;
@@ -71,10 +72,23 @@ public class TaskController {
     }
 
     /**
+     * Get aggregated task counts by status for dashboard.
+     *
+     * GET /api/tasks/summary
+     *
+     * @return task counts grouped by status (todo, inProgress, done, total)
+     */
+    @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<TaskSummaryResponse> getTaskSummary() {
+        return ResponseEntity.ok(taskService.getTaskSummary());
+    }
+
+    /**
      * Get a single task by ID.
-     * 
+     *
      * GET /api/tasks/{id}
-     * 
+     *
      * @param id the task ID
      * @return the task response
      */

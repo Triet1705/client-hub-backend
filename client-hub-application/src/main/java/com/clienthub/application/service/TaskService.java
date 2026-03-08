@@ -10,6 +10,7 @@ import com.clienthub.domain.enums.Role;
 import com.clienthub.domain.enums.TaskStatus;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
+import com.clienthub.application.dto.task.TaskSummaryResponse;
 import com.clienthub.application.exception.InvalidTaskStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
@@ -23,6 +24,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
+
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -173,6 +176,15 @@ public class TaskService extends TenantAwareService {
         if (!TaskStatusTransition.isTransitionAllowed(task.getStatus(), newStatus)) {
             throw new InvalidTaskStateException(task.getId(), task.getStatus(), newStatus);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public TaskSummaryResponse getTaskSummary() {
+        String tenantId = getCurrentTenantId();
+        long todo       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.TODO));
+        long inProgress = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.IN_PROGRESS));
+        long done       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.DONE));
+        return new TaskSummaryResponse(todo, inProgress, done);
     }
 
     @LogAudit(action = AuditAction.DELETE, entityType = "TASK", entityId = "#taskId")
