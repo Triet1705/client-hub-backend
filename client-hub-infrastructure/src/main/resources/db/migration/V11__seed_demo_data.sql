@@ -33,7 +33,7 @@ VALUES
      TRUE,
      NULL),
 
-    -- Freelancer: creates projects, manages tasks, receives payments
+    -- Freelancer: manages tasks, creates invoices, receives payments
     ('00000000-0000-0000-0000-000000000002',
      'default',
      'freelancer@demo.com',
@@ -68,7 +68,7 @@ VALUES
      'default', 'ADMIN', 'Full platform administrative access', 'system'),
 
     ('00000000-0000-0000-0001-000000000002',
-     'default', 'FREELANCER', 'Freelancer — manage projects, tasks, and invoices', 'system'),
+     'default', 'FREELANCER', 'Freelancer — manage tasks, create invoices, receive payments', 'system'),
 
     ('00000000-0000-0000-0001-000000000003',
      'default', 'CLIENT', 'Client — commission work and manage payments', 'system')
@@ -134,8 +134,9 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 
 -- ============================================================================
 -- 5. DEMO PROJECT
--- Owned by the freelancer (the person delivering the work).
--- owner_id represents who is managing / delivering — see TDD §3.1.
+-- Owned by the CLIENT (Jordan Lee) who commissions the work.
+-- owner_id = the user who created the project via API (always CLIENT per @PreAuthorize).
+-- ProjectService.updateProject() and deleteProject() enforce owner check — must match CLIENT.
 -- ============================================================================
 
 INSERT INTO projects (id, tenant_id, title, description, budget, status, deadline, owner_id, created_by)
@@ -148,7 +149,7 @@ VALUES
      5000.00,
      'IN_PROGRESS',
      CURRENT_DATE + INTERVAL '30 days',
-     '00000000-0000-0000-0000-000000000002',   -- freelancer owns/delivers this
+     '00000000-0000-0000-0000-000000000003',   -- client (Jordan Lee) owns this project
      'system')
 
 ON CONFLICT (id) DO NOTHING;
