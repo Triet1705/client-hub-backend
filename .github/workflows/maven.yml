@@ -5,6 +5,9 @@ on:
     branches: ["main", "develop"]
   pull_request:
     branches: ["main", "develop"]
+  schedule:
+    # Chạy OWASP scan lúc 2:00 AM UTC mỗi ngày
+    - cron: "0 2 * * *"
 
 jobs:
   build-and-test:
@@ -84,29 +87,7 @@ jobs:
           files: ./target/site/jacoco/jacoco.xml
           fail_ci_if_error: false
 
-      # 6. Dependency Security Scan (OWASP)
-      # Note: Uses caching to speed up subsequent runs
-      - name: Cache OWASP Dependency Check Data
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository/org/owasp/dependency-check-data
-          key: ${{ runner.os }}-owasp-data-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-owasp-data-
-
-      - name: OWASP Dependency Check
-        run: |
-          # Update to latest version and purge cache if corrupted
-          ./mvnw org.owasp:dependency-check-maven:11.1.0:check \
-            -DfailBuildOnCVSS=7 \
-            -DsuppressionFiles=owasp-suppressions.xml \
-            -B
-        continue-on-error: true
-        env:
-          # Fix H2 database corruption issues
-          JAVA_TOOL_OPTIONS: -Xmx2g
-
-      # 7. Upload Test Results
+      # 6. Upload Test Results
       - name: Publish Test Report
         uses: dorny/test-reporter@v1
         if: always()
@@ -115,7 +96,46 @@ jobs:
           path: "**/target/surefire-reports/*.xml"
           reporter: java-junit
 
-  # Job 2: Docker Build & Push (Only on main branch)
+  # Job 2: OWASP Security Scan (Nightly only — NVD download is 3-5 GB, too slow for PR CI)
+  owasp-scan:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Grant Execute Permission for Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Cache OWASP NVD Data
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: ${{ runner.os }}-owasp-nvd-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-owasp-nvd-
+
+      - name: OWASP Dependency Check
+        run: |
+          ./mvnw org.owasp:dependency-check-maven:11.1.0:check \
+            -DfailBuildOnCVSS=7 \
+            -DsuppressionFiles=owasp-suppressions.xml \
+            -B
+        continue-on-error: true
+        env:
+          JAVA_TOOL_OPTIONS: -Xmx2g
+
+  # Job 3: Docker Build & Push (Only on main branch)
   docker-build:
     name: Build Docker Image
     runs-on: ubuntu-latest
