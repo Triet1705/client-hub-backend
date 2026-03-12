@@ -1,6 +1,7 @@
 package com.clienthub.web.controller;
 
 import com.clienthub.domain.enums.TaskStatus;
+import com.clienthub.domain.enums.Role;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
 import com.clienthub.application.dto.task.TaskSummaryResponse;
@@ -53,9 +54,11 @@ public class TaskController {
      * 
      * GET /api/tasks?projectId={uuid}&status={status}&assignedToId={uuid}
      * 
+     * CLIENT / ADMIN: receives all tasks, optionally filtered by the provided params.
+     *
      * @param projectId optional project filter
      * @param status optional status filter
-     * @param assignedToId optional assignee filter
+     * @param assignedToId optional assignee filter (ignored for FREELANCER)
      * @param pageable pagination parameters
      * @return page of task responses
      */
@@ -65,23 +68,28 @@ public class TaskController {
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) UUID assignedToId,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        Page<TaskResponse> response = taskService.getTasks(projectId, status, assignedToId, pageable);
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        Page<TaskResponse> response = taskService.getTasks(projectId, status, assignedToId,
+                currentUser.getId(), callerRole, pageable);
         return ResponseEntity.ok(response);
     }
 
     /**
      * Get aggregated task counts by status for dashboard.
+     * FREELANCER: counts only their own assigned tasks.
+     * CLIENT / ADMIN: counts all tasks in tenant.
      *
      * GET /api/tasks/summary
-     *
-     * @return task counts grouped by status (todo, inProgress, done, total)
      */
     @GetMapping("/summary")
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
-    public ResponseEntity<TaskSummaryResponse> getTaskSummary() {
-        return ResponseEntity.ok(taskService.getTaskSummary());
+    public ResponseEntity<TaskSummaryResponse> getTaskSummary(
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(taskService.getTaskSummary(currentUser.getId(), callerRole));
     }
 
     /**
@@ -140,6 +148,7 @@ public class TaskController {
 
     /**
      * Assign a task to a user.
+     * Only CLIENT or ADMIN can reassign tasks.
      * 
      * PATCH /api/tasks/{id}/assign
      * 
@@ -148,7 +157,7 @@ public class TaskController {
      * @return the updated task response
      */
     @PatchMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<TaskResponse> assignTask(
             @PathVariable UUID id,
             @RequestParam UUID userId) {
