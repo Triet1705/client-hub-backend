@@ -110,13 +110,13 @@ public class ProjectService extends TenantAwareService {
         return projectMapper.toResponse(project);
     }
 
-    public ProjectResponse updateProject(UUID projectId, ProjectRequest request, UUID currentUserId) {
+    public ProjectResponse updateProject(UUID projectId, ProjectRequest request, UUID currentUserId, boolean isAdmin) {
         String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
 
-        if (!project.getOwner().getId().equals(currentUserId)) {
+        if (!isAdmin && !project.getOwner().getId().equals(currentUserId)) {
             logger.warn("[SECURITY] User {} attempted to update project {} owned by {}",
                     currentUserId, projectId, project.getOwner().getId());
             throw new AccessDeniedException("You can only update your own projects");
@@ -136,13 +136,13 @@ public class ProjectService extends TenantAwareService {
         return projectMapper.toResponse(updatedProject);
     }
 
-    public void deleteProject(UUID projectId, UUID currentUserId) {
+    public void deleteProject(UUID projectId, UUID currentUserId, boolean isAdmin) {
         String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
 
-        if (!project.getOwner().getId().equals(currentUserId)) {
+        if (!isAdmin && !project.getOwner().getId().equals(currentUserId)) {
             logger.warn("[SECURITY] User {} attempted to delete project {} owned by {}",
                     currentUserId, projectId, project.getOwner().getId());
             throw new AccessDeniedException("You can only delete your own projects");

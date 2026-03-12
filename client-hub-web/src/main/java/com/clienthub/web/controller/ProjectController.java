@@ -29,7 +29,7 @@ public class ProjectController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('CLIENT')")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<ProjectResponse> createProject(
             @Valid @RequestBody ProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
@@ -55,20 +55,22 @@ public class ProjectController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('CLIENT')") 
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<ProjectResponse> updateProject(
             @PathVariable UUID id,
             @Valid @RequestBody ProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
-        return ResponseEntity.ok(projectService.updateProject(id, request, currentUser.getId()));
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        return ResponseEntity.ok(projectService.updateProject(id, request, currentUser.getId(), isAdmin));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('CLIENT')")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<Void> deleteProject(
             @PathVariable UUID id,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
-        projectService.deleteProject(id, currentUser.getId());
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        projectService.deleteProject(id, currentUser.getId(), isAdmin);
         return ResponseEntity.noContent().build();
     }
 }
