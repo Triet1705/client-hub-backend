@@ -124,7 +124,7 @@ class ProjectServiceTest {
                 .thenReturn(Optional.of(project));
 
         assertThrows(AccessDeniedException.class,
-                () -> projectService.updateProject(PROJECT_ID, new ProjectRequest(), USER_ID));
+                () -> projectService.updateProject(PROJECT_ID, new ProjectRequest(), USER_ID, false));
     }
 
     @Test
@@ -145,7 +145,7 @@ class ProjectServiceTest {
                 .thenReturn(Optional.of(project));
 
         assertThrows(IllegalStateException.class,
-                () -> projectService.updateProject(PROJECT_ID, request, USER_ID));
+                () -> projectService.updateProject(PROJECT_ID, request, USER_ID, false));
     }
 
     private User createUser(UUID id, String tenantId) {
