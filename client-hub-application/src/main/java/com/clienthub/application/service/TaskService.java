@@ -91,16 +91,23 @@ public class TaskService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, UUID assignedToId, Pageable pageable) {
+    public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, UUID assignedToId,
+                                       UUID currentUserId, Role currentUserRole, Pageable pageable) {
         String tenantId = getCurrentTenantId();
-        Page<Task> tasks;
 
+        final UUID effectiveAssigneeId = (currentUserRole == Role.FREELANCER) ? currentUserId : assignedToId;
+
+        Page<Task> tasks;
         if (projectId != null && status != null) {
-            tasks = taskRepository.findByProjectIdAndStatusAndTenantId(projectId, status, tenantId, pageable);
+            tasks = (effectiveAssigneeId != null)
+                    ? taskRepository.findByProjectIdAndStatusAndAssignedToIdAndTenantId(projectId, status, effectiveAssigneeId, tenantId, pageable)
+                    : taskRepository.findByProjectIdAndStatusAndTenantId(projectId, status, tenantId, pageable);
         } else if (projectId != null) {
-            tasks = taskRepository.findByProjectIdAndTenantId(projectId, tenantId, pageable);
-        } else if (assignedToId != null) {
-            tasks = taskRepository.findByAssignedToIdAndTenantId(assignedToId, tenantId, pageable);
+            tasks = (effectiveAssigneeId != null)
+                    ? taskRepository.findByProjectIdAndAssignedToIdAndTenantId(projectId, effectiveAssigneeId, tenantId, pageable)
+                    : taskRepository.findByProjectIdAndTenantId(projectId, tenantId, pageable);
+        } else if (effectiveAssigneeId != null) {
+            tasks = taskRepository.findByAssignedToIdAndTenantId(effectiveAssigneeId, tenantId, pageable);
         } else {
             tasks = taskRepository.findAllByTenantId(tenantId, pageable);
         }
@@ -179,8 +186,14 @@ public class TaskService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public TaskSummaryResponse getTaskSummary() {
+    public TaskSummaryResponse getTaskSummary(UUID currentUserId, Role currentUserRole) {
         String tenantId = getCurrentTenantId();
+        if (currentUserRole == Role.FREELANCER) {
+            long todo       = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.TODO));
+            long inProgress = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.IN_PROGRESS));
+            long done       = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.DONE));
+            return new TaskSummaryResponse(todo, inProgress, done);
+        }
         long todo       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.TODO));
         long inProgress = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.IN_PROGRESS));
         long done       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.DONE));

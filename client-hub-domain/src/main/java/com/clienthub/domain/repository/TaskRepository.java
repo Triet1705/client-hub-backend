@@ -54,5 +54,30 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
             "LEFT JOIN FETCH t.assignedTo " +
             "WHERE t.tenantId = :tenantId")
     List<Task> findAllByTenantIdWithRelations(@Param("tenantId") String tenantId);
+
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<TaskStatus> statuses);
+
+    @Query("SELECT t FROM Task t WHERE t.project.id = :projectId AND t.assignedTo.id = :userId AND t.tenantId = :tenantId")
+    Page<Task> findByProjectIdAndAssignedToIdAndTenantId(
+            @Param("projectId") UUID projectId,
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            Pageable pageable
+    );
+
+    @Query("SELECT t FROM Task t WHERE t.project.id = :projectId AND t.status = :status AND t.assignedTo.id = :userId AND t.tenantId = :tenantId")
+    Page<Task> findByProjectIdAndStatusAndAssignedToIdAndTenantId(
+            @Param("projectId") UUID projectId,
+            @Param("status") TaskStatus status,
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            Pageable pageable
+    );
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.assignedTo.id = :userId AND t.tenantId = :tenantId AND t.status IN :statuses")
+    long countByAssignedToIdAndTenantIdAndStatusIn(
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            @Param("statuses") java.util.List<TaskStatus> statuses
+    );
 }
