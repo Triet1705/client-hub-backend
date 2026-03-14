@@ -2,6 +2,8 @@ package com.clienthub.domain.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -10,10 +12,12 @@ import java.util.UUID;
 @Embeddable
 public class ProjectMemberId implements Serializable {
 
-    @Column(name = "project_id", columnDefinition = "uuid")
+    @JdbcTypeCode(SqlTypes.UUID)
+    @Column(name = "project_id")
     private UUID projectId;
 
-    @Column(name = "user_id", columnDefinition = "uuid")
+    @JdbcTypeCode(SqlTypes.UUID)
+    @Column(name = "user_id")
     private UUID userId;
 
     public ProjectMemberId() {
