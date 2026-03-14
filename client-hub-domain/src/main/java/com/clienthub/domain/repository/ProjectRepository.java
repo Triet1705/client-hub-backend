@@ -39,6 +39,25 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
         Pageable pageable
     );
 
+        @EntityGraph(attributePaths = {"owner"})
+        @Query("SELECT p FROM Project p JOIN ProjectMember pm ON pm.id.projectId = p.id " +
+            "WHERE pm.id.userId = :userId AND pm.tenantId = :tenantId")
+        Page<Project> findMemberProjectsByUserIdAndTenantId(
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            Pageable pageable
+        );
+
+        @EntityGraph(attributePaths = {"owner"})
+        @Query("SELECT p FROM Project p JOIN ProjectMember pm ON pm.id.projectId = p.id " +
+            "WHERE pm.id.userId = :userId AND pm.tenantId = :tenantId AND p.status = :status")
+        Page<Project> findMemberProjectsByUserIdAndTenantIdAndStatus(
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            @Param("status") ProjectStatus status,
+            Pageable pageable
+        );
+
     @Query("SELECT COUNT(p) FROM Project p WHERE p.tenantId = :tenantId AND p.status = :status")
     long countByTenantIdAndStatus(
         @Param("tenantId") String tenantId,
