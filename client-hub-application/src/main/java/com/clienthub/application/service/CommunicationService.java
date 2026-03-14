@@ -28,6 +28,7 @@ public class CommunicationService extends TenantAwareService {
     private final NotificationRepository notificationRepository;
 
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final TaskRepository taskRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
@@ -36,6 +37,7 @@ public class CommunicationService extends TenantAwareService {
                                 CommentRepository commentRepository,
                                 NotificationRepository notificationRepository,
                                 ProjectRepository projectRepository,
+                                ProjectMemberRepository projectMemberRepository,
                                 TaskRepository taskRepository,
                                 InvoiceRepository invoiceRepository,
                                 UserRepository userRepository) {
@@ -43,6 +45,7 @@ public class CommunicationService extends TenantAwareService {
         this.commentRepository = commentRepository;
         this.notificationRepository = notificationRepository;
         this.projectRepository = projectRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.taskRepository = taskRepository;
         this.invoiceRepository = invoiceRepository;
         this.userRepository = userRepository;
@@ -157,14 +160,13 @@ public class CommunicationService extends TenantAwareService {
 
         boolean isOwner = project.getOwner().getId().equals(userId);
 
-        boolean isWorkingOnProject = taskRepository.findByProjectIdAndTenantId(projectId, tenantId, Pageable.unpaged())
-                .stream()
-                .anyMatch(t -> t.getAssignedTo() != null && t.getAssignedTo().getId().equals(userId));
+        boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+            projectId, userId, tenantId);
 
-        if (!isOwner && !isWorkingOnProject) {
+        if (!isOwner && !isMember) {
             User user = userRepository.findById(userId).orElseThrow();
             if (user.getRole() != Role.ADMIN) {
-                throw new AccessDeniedException("You are not a member of this project (Owner or Active Task Assignee)");
+            throw new AccessDeniedException("You are not a member of this project (Owner or Explicit Member)");
             }
         }
 

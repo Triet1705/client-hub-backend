@@ -1,6 +1,10 @@
 package com.clienthub.web.controller;
 
 import com.clienthub.domain.enums.ProjectStatus;
+import com.clienthub.domain.enums.Role;
+import com.clienthub.application.dto.project.ProjectMemberRequest;
+import com.clienthub.application.dto.project.ProjectMemberResponse;
+import com.clienthub.application.dto.project.ProjectFreelancerSearchResponse;
 import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
@@ -16,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -42,9 +47,11 @@ public class ProjectController {
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
     public ResponseEntity<Page<ProjectResponse>> getProjects(
             @RequestParam(required = false) ProjectStatus status,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        Page<ProjectResponse> response = projectService.getProjects(status, pageable);
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        Page<ProjectResponse> response = projectService.getProjects(status, pageable, currentUser.getId(), callerRole);
         return ResponseEntity.ok(response);
     }
 
@@ -72,5 +79,46 @@ public class ProjectController {
         boolean isAdmin = "ADMIN".equals(currentUser.getRole());
         projectService.deleteProject(id, currentUser.getId(), isAdmin);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/members")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    public ResponseEntity<ProjectMemberResponse> addProjectMember(
+            @PathVariable UUID id,
+            @Valid @RequestBody ProjectMemberRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        ProjectMemberResponse response = projectService.addMember(id, request.getUserId(), currentUser.getId(), isAdmin);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @DeleteMapping("/{id}/members/{userId}")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    public ResponseEntity<Void> removeProjectMember(
+            @PathVariable UUID id,
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        projectService.removeMember(id, userId, currentUser.getId(), isAdmin);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/members")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<List<ProjectMemberResponse>> getProjectMembers(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectService.getProjectMembers(id, currentUser.getId(), callerRole));
+    }
+
+    @GetMapping("/{id}/freelancers/search")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    public ResponseEntity<List<ProjectFreelancerSearchResponse>> searchProjectFreelancers(
+            @PathVariable UUID id,
+            @RequestParam(required = false) String keyword,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        return ResponseEntity.ok(projectService.searchAvailableFreelancers(id, keyword, currentUser.getId(), isAdmin));
     }
 }

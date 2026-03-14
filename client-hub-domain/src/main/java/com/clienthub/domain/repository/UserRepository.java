@@ -39,4 +39,23 @@ public interface UserRepository extends JpaRepository<User, UUID>,
 
     @Query(value = "SELECT * FROM users", nativeQuery = true)
     List<User> findAllNative();
+
+        @Query("""
+                SELECT u FROM User u
+                WHERE u.tenantId = :tenantId
+                    AND u.role = :role
+                    AND u.active = true
+                    AND (
+                        :keyword IS NULL
+                        OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                        OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    )
+                ORDER BY u.fullName ASC, u.email ASC
+        """)
+        Page<User> searchActiveUsersByTenantIdAndRoleAndKeyword(
+                        @Param("tenantId") String tenantId,
+                        @Param("role") Role role,
+                        @Param("keyword") String keyword,
+                        Pageable pageable
+        );
 }
