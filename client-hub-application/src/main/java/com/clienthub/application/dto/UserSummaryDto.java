@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public class UserSummaryDto {
     private UUID id;
+    private String fullName;
     private String email;
     private String role;
     private String tenantId;
@@ -14,7 +15,13 @@ public class UserSummaryDto {
 
     public UserSummaryDto(UUID id, String email, String role, String tenantId, String status,
                           int activeSessionCounts, Instant lastLoginAt) {
+        this(id, null, email, role, tenantId, status, activeSessionCounts, lastLoginAt);
+    }
+
+    public UserSummaryDto(UUID id, String fullName, String email, String role, String tenantId, String status,
+                          int activeSessionCounts, Instant lastLoginAt) {
         this.id = id;
+        this.fullName = fullName;
         this.email = email;
         this.role = role;
         this.tenantId = tenantId;
@@ -29,6 +36,14 @@ public class UserSummaryDto {
 
     public void setId (UUID id) {
         this.id = id;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
     }
 
     public String getEmail() {

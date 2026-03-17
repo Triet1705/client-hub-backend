@@ -26,12 +26,15 @@ public class TaskResponse {
 
     private Instant createdAt;
     private Instant updatedAt;
+    private String createdBy;
+    private String lastModifiedBy;
 
     public TaskResponse() {}
 
     public TaskResponse(UUID id, String title, String description, UUID projectId, String projectTitle,
                         UserSummaryDto assignedTo, TaskStatus status, TaskPriority priority, Integer estimatedHours,
-                        Integer actualHours, LocalDateTime dueDate, Instant createdAt, Instant updatedAt) {
+                        Integer actualHours, LocalDateTime dueDate, Instant createdAt, Instant updatedAt,
+                        String createdBy, String lastModifiedBy) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -45,6 +48,8 @@ public class TaskResponse {
         this.dueDate = dueDate;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.createdBy = createdBy;
+        this.lastModifiedBy = lastModifiedBy;
     }
 
     public UUID getId() { return id; }
@@ -86,6 +91,12 @@ public class TaskResponse {
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+    public String getLastModifiedBy() { return lastModifiedBy; }
+    public void setLastModifiedBy(String lastModifiedBy) { this.lastModifiedBy = lastModifiedBy; }
+
     public static TaskResponseBuilder builder() {
         return new TaskResponseBuilder();
     }
@@ -104,6 +115,8 @@ public class TaskResponse {
         private LocalDateTime dueDate;
         private Instant createdAt;
         private Instant updatedAt;
+        private String createdBy;
+        private String lastModifiedBy;
 
         TaskResponseBuilder() {}
 
@@ -120,9 +133,11 @@ public class TaskResponse {
         public TaskResponseBuilder dueDate(LocalDateTime dueDate) { this.dueDate = dueDate; return this; }
         public TaskResponseBuilder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
         public TaskResponseBuilder updatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
+        public TaskResponseBuilder createdBy(String createdBy) { this.createdBy = createdBy; return this; }
+        public TaskResponseBuilder lastModifiedBy(String lastModifiedBy) { this.lastModifiedBy = lastModifiedBy; return this; }
 
         public TaskResponse build() {
-            return new TaskResponse(id, title, description, projectId, projectTitle, assignedTo, status, priority, estimatedHours, actualHours, dueDate, createdAt, updatedAt);
+            return new TaskResponse(id, title, description, projectId, projectTitle, assignedTo, status, priority, estimatedHours, actualHours, dueDate, createdAt, updatedAt, createdBy, lastModifiedBy);
         }
     }
 }
