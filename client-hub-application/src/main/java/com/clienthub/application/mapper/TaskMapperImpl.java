@@ -28,6 +28,8 @@ public class TaskMapperImpl implements TaskMapper {
         response.setDueDate(task.getDueDate());
         response.setCreatedAt(task.getCreatedAt());
         response.setUpdatedAt(task.getUpdatedAt());
+        response.setCreatedBy(task.getCreatedBy());
+        response.setLastModifiedBy(task.getLastModifiedBy());
 
         if (task.getProject() != null) {
             response.setProjectId(task.getProject().getId());
@@ -100,6 +102,7 @@ public class TaskMapperImpl implements TaskMapper {
 
         return new UserSummaryDto(
                 user.getId(),
+            user.getFullName(),
                 user.getEmail(),
                 user.getRole() != null ? user.getRole().name() : null,
                 user.getTenantId(),
