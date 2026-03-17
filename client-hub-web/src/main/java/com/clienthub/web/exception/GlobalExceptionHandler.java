@@ -1,5 +1,7 @@
 package com.clienthub.web.exception;
 
+import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.application.exception.TaskNotFoundException;
 import com.clienthub.web.dto.common.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +11,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -83,6 +86,35 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableRequest(HttpMessageNotReadableException ex) {
+        log.warn("Unreadable request payload: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Invalid Request Body",
+                "Request payload format is invalid or contains unsupported values.",
+                HttpStatus.BAD_REQUEST.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler({
+        ResourceNotFoundException.class,
+        TaskNotFoundException.class
+    })
+    public ResponseEntity<ErrorResponse> handleNotFound(RuntimeException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Not Found",
+                ex.getMessage(),
+                HttpStatus.NOT_FOUND.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
     @ExceptionHandler({
