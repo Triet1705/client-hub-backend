@@ -1,6 +1,7 @@
 package com.clienthub.web.controller;
 
 import com.clienthub.domain.enums.TaskStatus;
+import com.clienthub.domain.enums.TaskPriority;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
@@ -52,12 +53,13 @@ public class TaskController {
     /**
      * Get all tasks with optional filters.
      * 
-     * GET /api/tasks?projectId={uuid}&status={status}&assignedToId={uuid}
+    * GET /api/tasks?projectId={uuid}&status={status}&priority={priority}&assignedToId={uuid}
      * 
      * CLIENT / ADMIN: receives all tasks, optionally filtered by the provided params.
      *
      * @param projectId optional project filter
      * @param status optional status filter
+    * @param priority optional priority filter
      * @param assignedToId optional assignee filter (ignored for FREELANCER)
      * @param pageable pagination parameters
      * @return page of task responses
@@ -67,12 +69,13 @@ public class TaskController {
     public ResponseEntity<Page<TaskResponse>> getTasks(
             @RequestParam(required = false) UUID projectId,
             @RequestParam(required = false) TaskStatus status,
+            @RequestParam(required = false) TaskPriority priority,
             @RequestParam(required = false) UUID assignedToId,
             @AuthenticationPrincipal CustomUserDetails currentUser,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         Role callerRole = Role.valueOf(currentUser.getRole());
-        Page<TaskResponse> response = taskService.getTasks(projectId, status, assignedToId,
+        Page<TaskResponse> response = taskService.getTasks(projectId, status, priority, assignedToId,
                 currentUser.getId(), callerRole, pageable);
         return ResponseEntity.ok(response);
     }
