@@ -7,6 +7,7 @@ import com.clienthub.domain.entity.Task;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.enums.Role;
+import com.clienthub.domain.enums.TaskPriority;
 import com.clienthub.domain.enums.TaskStatus;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
@@ -19,8 +20,6 @@ import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.TaskRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.application.validation.TaskStatusTransition;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -34,8 +33,6 @@ import java.util.UUID;
 @Service
 @Transactional
 public class TaskService extends TenantAwareService {
-
-    private static final Logger logger = LoggerFactory.getLogger(TaskService.class);
 
     private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
@@ -91,26 +88,20 @@ public class TaskService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, UUID assignedToId,
+    public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, TaskPriority priority, UUID assignedToId,
                                        UUID currentUserId, Role currentUserRole, Pageable pageable) {
         String tenantId = getCurrentTenantId();
 
         final UUID effectiveAssigneeId = (currentUserRole == Role.FREELANCER) ? currentUserId : assignedToId;
 
-        Page<Task> tasks;
-        if (projectId != null && status != null) {
-            tasks = (effectiveAssigneeId != null)
-                    ? taskRepository.findByProjectIdAndStatusAndAssignedToIdAndTenantId(projectId, status, effectiveAssigneeId, tenantId, pageable)
-                    : taskRepository.findByProjectIdAndStatusAndTenantId(projectId, status, tenantId, pageable);
-        } else if (projectId != null) {
-            tasks = (effectiveAssigneeId != null)
-                    ? taskRepository.findByProjectIdAndAssignedToIdAndTenantId(projectId, effectiveAssigneeId, tenantId, pageable)
-                    : taskRepository.findByProjectIdAndTenantId(projectId, tenantId, pageable);
-        } else if (effectiveAssigneeId != null) {
-            tasks = taskRepository.findByAssignedToIdAndTenantId(effectiveAssigneeId, tenantId, pageable);
-        } else {
-            tasks = taskRepository.findAllByTenantId(tenantId, pageable);
-        }
+        Page<Task> tasks = taskRepository.findByFiltersAndTenantId(
+                projectId,
+                status,
+                priority,
+                effectiveAssigneeId,
+                tenantId,
+                pageable
+        );
 
         return tasks.map(taskMapper::toResponse);
     }
