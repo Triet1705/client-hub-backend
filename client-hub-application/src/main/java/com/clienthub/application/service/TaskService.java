@@ -22,6 +22,7 @@ import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.application.validation.TaskStatusTransition;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -38,15 +39,18 @@ public class TaskService extends TenantAwareService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final TaskMapper taskMapper;
+    private final NotificationProducerService notificationProducerService;
 
     public TaskService(TaskRepository taskRepository,
                        ProjectRepository projectRepository,
                        UserRepository userRepository,
-                       TaskMapper taskMapper) {
+                       TaskMapper taskMapper,
+                       NotificationProducerService notificationProducerService) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.taskMapper = taskMapper;
+        this.notificationProducerService = notificationProducerService;
     }
 
     private void validateUserTenant(User user, String expectedTenantId) {
@@ -94,14 +98,22 @@ public class TaskService extends TenantAwareService {
 
         final UUID effectiveAssigneeId = (currentUserRole == Role.FREELANCER) ? currentUserId : assignedToId;
 
-        Page<Task> tasks = taskRepository.findByFiltersAndTenantId(
-                projectId,
-                status,
-                priority,
-                effectiveAssigneeId,
-                tenantId,
-                pageable
-        );
+        Specification<Task> spec = Specification.where((root, query, cb) -> cb.equal(root.get("tenantId"), tenantId));
+
+        if (projectId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("project").get("id"), projectId));
+        }
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (priority != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("priority"), priority));
+        }
+        if (effectiveAssigneeId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("assignedTo").get("id"), effectiveAssigneeId));
+        }
+
+        Page<Task> tasks = taskRepository.findAll(spec, pageable);
 
         return tasks.map(taskMapper::toResponse);
     }
@@ -163,10 +175,17 @@ public class TaskService extends TenantAwareService {
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
 
+        TaskStatus oldStatus = task.getStatus();
+
         validateStatusTransition(task, newStatus);
         task.setStatus(newStatus);
 
         Task updatedTask = taskRepository.save(task);
+
+        if (oldStatus != TaskStatus.DONE && newStatus == TaskStatus.DONE) {
+            notificationProducerService.notifyTaskCompleted(updatedTask);
+        }
+
         return taskMapper.toResponse(updatedTask);
     }
 

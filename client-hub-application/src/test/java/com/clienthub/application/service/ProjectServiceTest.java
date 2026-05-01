@@ -8,6 +8,7 @@ import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.mapper.ProjectMapper;
+import com.clienthub.domain.repository.ProjectMemberRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -39,7 +40,13 @@ class ProjectServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
     private ProjectMapper projectMapper;
+
+    @Mock
+    private NotificationProducerService notificationProducerService;
 
     @InjectMocks
     private ProjectService projectService;
