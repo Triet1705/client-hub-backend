@@ -8,8 +8,11 @@ import com.clienthub.application.dto.UserSummaryDto;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.application.service.AnalyticsService;
 import com.clienthub.application.service.AuthService;
 import com.clienthub.application.service.UserService;
+import com.clienthub.application.dto.analytics.AdminDashboardResponse;
+import com.clienthub.common.context.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -39,16 +42,19 @@ public class AdminController {
     private final UserService userService;
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final AnalyticsService analyticsService;
 
     @Value("${jwt.expiration:900000}")
     private long jwtExpirationMs;
 
     public AdminController(UserService userService,
                            AuthService authService,
-                           JwtTokenProvider jwtTokenProvider) {
+                           JwtTokenProvider jwtTokenProvider,
+                           AnalyticsService analyticsService) {
         this.userService = userService;
         this.authService = authService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.analyticsService = analyticsService;
     }
 
     /**
@@ -56,12 +62,8 @@ public class AdminController {
      * Basic admin dashboard stats/welcome.
      */
     @GetMapping("/dashboard")
-    public ResponseEntity<Object> getAdminDashboard() {
-        return ResponseEntity.ok(Map.of(
-                "message", "Welcome to Admin Dashboard",
-                "status", "Authorized",
-                "timestamp", System.currentTimeMillis()
-        ));
+    public ResponseEntity<AdminDashboardResponse> getAdminDashboard() {
+        return ResponseEntity.ok(analyticsService.getAdminDashboard(TenantContext.getTenantId()));
     }
 
     /**

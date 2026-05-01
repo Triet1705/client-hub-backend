@@ -9,6 +9,9 @@ import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.application.service.ProjectService;
+import com.clienthub.application.service.AnalyticsService;
+import com.clienthub.application.dto.analytics.ProjectProgressResponse;
+import com.clienthub.common.context.TenantContext;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,9 +31,11 @@ import java.util.UUID;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final AnalyticsService analyticsService;
 
-    public ProjectController(ProjectService projectService) {
+    public ProjectController(ProjectService projectService, AnalyticsService analyticsService) {
         this.projectService = projectService;
+        this.analyticsService = analyticsService;
     }
 
     @PostMapping
@@ -59,6 +64,12 @@ public class ProjectController {
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
     public ResponseEntity<ProjectResponse> getProjectById(@PathVariable UUID id) {
         return ResponseEntity.ok(projectService.getProjectById(id));
+    }
+
+    @GetMapping("/{id}/progress")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<ProjectProgressResponse> getProjectProgress(@PathVariable UUID id) {
+        return ResponseEntity.ok(analyticsService.getProjectProgress(id, TenantContext.getTenantId()));
     }
 
     @PutMapping("/{id}")
