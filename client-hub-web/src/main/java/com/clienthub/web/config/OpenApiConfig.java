@@ -63,7 +63,7 @@ public class OpenApiConfig {
     public GroupedOpenApi communicationApi() {
         return GroupedOpenApi.builder()
                 .group("3. Communication")
-                .pathsToMatch("/api/comments/**")
+                                .pathsToMatch("/api/comments/**", "/api/notifications/**")
                 .build();
     }
 
