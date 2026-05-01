@@ -78,8 +78,8 @@ class NotificationIntegrationTest {
     @AfterEach
     void tearDown() {
         TenantContext.setTenantId(TENANT_ID);
-        JdbcTestUtils.deleteFromTables(jdbcTemplate, "notifications");
-        JdbcTestUtils.deleteFromTables(jdbcTemplate, "users");
+        // Delete dependent tables in correct order to avoid FK constraint violations
+        JdbcTestUtils.deleteFromTables(jdbcTemplate, "invoices", "notifications", "comments", "communication_threads", "users");
         TenantContext.clear();
     }
 
