@@ -28,15 +28,18 @@ public class InvoiceService extends TenantAwareService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final InvoiceMapper invoiceMapper;
+    private final NotificationProducerService notificationProducerService;
 
     public InvoiceService(InvoiceRepository invoiceRepository,
                           ProjectRepository projectRepository,
                           UserRepository userRepository,
-                          InvoiceMapper invoiceMapper) {
+                          InvoiceMapper invoiceMapper,
+                          NotificationProducerService notificationProducerService) {
         this.invoiceRepository = invoiceRepository;
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.invoiceMapper = invoiceMapper;
+        this.notificationProducerService = notificationProducerService;
     }
 
     public InvoiceResponse createInvoice(InvoiceRequest request, UUID freelancerId) {
@@ -118,6 +121,8 @@ public class InvoiceService extends TenantAwareService {
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
+        InvoiceStatus oldStatus = invoice.getStatus();
+
         User currentUser = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
@@ -142,6 +147,11 @@ public class InvoiceService extends TenantAwareService {
         }
 
         Invoice updated = invoiceRepository.save(invoice);
+
+        if (oldStatus != InvoiceStatus.PAID && newStatus == InvoiceStatus.PAID) {
+            notificationProducerService.notifyInvoicePaid(updated);
+        }
+
         return invoiceMapper.toResponse(updated);
     }
 

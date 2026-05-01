@@ -55,6 +55,9 @@ class TaskServiceTest {
     @Mock
     private TaskMapper taskMapper;
 
+    @Mock
+    private NotificationProducerService notificationProducerService;
+
     @InjectMocks
     private TaskService taskService;
 
@@ -169,6 +172,25 @@ class TaskServiceTest {
         assertNotNull(result);
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
         verify(taskRepository).save(task);
+        verify(notificationProducerService, never()).notifyTaskCompleted(any(Task.class));
+    }
+
+    @Test
+    @DisplayName("Should publish notification when task transitions to DONE")
+    void updateTaskStatus_ToDone_ShouldPublishNotification() {
+        Task task = createTask();
+        task.setStatus(TaskStatus.IN_PROGRESS);
+        TaskResponse expectedResponse = createTaskResponse();
+
+        when(taskRepository.findByIdAndTenantId(TASK_ID, TENANT_ID))
+                .thenReturn(Optional.of(task));
+        when(taskRepository.save(task)).thenReturn(task);
+        when(taskMapper.toResponse(task)).thenReturn(expectedResponse);
+
+        TaskResponse result = taskService.updateTaskStatus(TASK_ID, TaskStatus.DONE);
+
+        assertNotNull(result);
+        verify(notificationProducerService).notifyTaskCompleted(task);
     }
 
     @Test

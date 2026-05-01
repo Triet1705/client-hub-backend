@@ -39,15 +39,18 @@ public class ProjectService extends TenantAwareService {
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final ProjectMapper projectMapper;
+    private final NotificationProducerService notificationProducerService;
 
     public ProjectService(ProjectRepository projectRepository,
                           ProjectMemberRepository projectMemberRepository,
                           UserRepository userRepository,
-                          ProjectMapper projectMapper) {
+                          ProjectMapper projectMapper,
+                          NotificationProducerService notificationProducerService) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.projectMapper = projectMapper;
+        this.notificationProducerService = notificationProducerService;
     }
 
     private void validateUserTenant(User user, String expectedTenantId) {
@@ -158,6 +161,10 @@ public class ProjectService extends TenantAwareService {
 
         projectMapper.updateEntityFromRequest(request, project);
         Project updatedProject = projectRepository.save(project);
+
+        if (oldStatus != ProjectStatus.COMPLETED && updatedProject.getStatus() == ProjectStatus.COMPLETED) {
+            notificationProducerService.notifyProjectCompleted(updatedProject);
+        }
 
         logger.info("[AUDIT] Project updated: id={}, user={}, statusChange={}->{}",
                 projectId, currentUserId, oldStatus, updatedProject.getStatus());

@@ -1,11 +1,11 @@
 package com.clienthub.domain.repository;
 
 import com.clienthub.domain.entity.Task;
-import com.clienthub.domain.enums.TaskPriority;
 import com.clienthub.domain.enums.TaskStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public interface TaskRepository extends JpaRepository<Task, UUID> {
+public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
 
     @Query("SELECT t FROM Task t WHERE t.project.id = :projectId AND t.tenantId = :tenantId")
     Page<Task> findByProjectIdAndTenantId(
@@ -71,23 +71,6 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
             @Param("projectId") UUID projectId,
             @Param("status") TaskStatus status,
             @Param("userId") UUID userId,
-            @Param("tenantId") String tenantId,
-            Pageable pageable
-    );
-
-    @Query("""
-            SELECT t FROM Task t
-            WHERE t.tenantId = :tenantId
-              AND (:projectId IS NULL OR t.project.id = :projectId)
-              AND (:status IS NULL OR t.status = :status)
-              AND (:priority IS NULL OR t.priority = :priority)
-              AND (:assignedToId IS NULL OR t.assignedTo.id = :assignedToId)
-            """)
-    Page<Task> findByFiltersAndTenantId(
-            @Param("projectId") UUID projectId,
-            @Param("status") TaskStatus status,
-            @Param("priority") TaskPriority priority,
-            @Param("assignedToId") UUID assignedToId,
             @Param("tenantId") String tenantId,
             Pageable pageable
     );
