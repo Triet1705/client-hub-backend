@@ -20,6 +20,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByIdAndTenantId(Long id, String tenantId);
     java.util.List<Invoice> findByTenantIdAndStatus(String tenantId, InvoiceStatus status);
+    
+    long countByTenantId(String tenantId);
+    long countByTenantIdAndStatus(String tenantId, InvoiceStatus status);
+    long countByTenantIdAndStatusNot(String tenantId, InvoiceStatus status);
 
     @Query("SELECT COALESCE(SUM(i.amount), 0) FROM Invoice i WHERE i.tenantId = :tenantId AND i.status IN :statuses")
     java.math.BigDecimal sumAmountByTenantIdAndStatuses(

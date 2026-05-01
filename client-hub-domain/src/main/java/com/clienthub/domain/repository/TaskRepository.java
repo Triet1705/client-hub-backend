@@ -58,6 +58,12 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<TaskStatus> statuses);
 
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.project.id = :projectId AND t.tenantId = :tenantId")
+    long countByProjectIdAndTenantId(@Param("projectId") UUID projectId, @Param("tenantId") String tenantId);
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.project.id = :projectId AND t.tenantId = :tenantId AND t.status = :status")
+    long countByProjectIdAndTenantIdAndStatus(@Param("projectId") UUID projectId, @Param("tenantId") String tenantId, @Param("status") TaskStatus status);
+
     @Query("SELECT t FROM Task t WHERE t.project.id = :projectId AND t.assignedTo.id = :userId AND t.tenantId = :tenantId")
     Page<Task> findByProjectIdAndAssignedToIdAndTenantId(
             @Param("projectId") UUID projectId,

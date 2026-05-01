@@ -14,4 +14,9 @@ public interface CommunicationThreadRepository extends JpaRepository<Communicati
             String targetId,
             String tenantId
     );
+
+    long countByTenantId(String tenantId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(t) FROM CommunicationThread t WHERE t.tenantId = :tenantId AND (SELECT COUNT(DISTINCT c.author.id) FROM Comment c WHERE c.thread = t) >= 2")
+    long countThreadsWithMultipleParticipantsByTenantId(@org.springframework.data.repository.query.Param("tenantId") String tenantId);
 }

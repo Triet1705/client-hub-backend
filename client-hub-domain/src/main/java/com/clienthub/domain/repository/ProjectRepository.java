@@ -65,6 +65,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
     );
 
     boolean existsByIdAndTenantId(UUID id, String tenantId);
+    long countByTenantId(String tenantId);
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<ProjectStatus> statuses);
 }
 
