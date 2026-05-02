@@ -61,10 +61,15 @@ public class AdminController {
      * GET /api/admin/dashboard
      * Basic admin dashboard stats/welcome.
      */
-    @GetMapping("/dashboard")
-    public ResponseEntity<AdminDashboardResponse> getAdminDashboard() {
-        return ResponseEntity.ok(analyticsService.getAdminDashboard(TenantContext.getTenantId()));
-    }
+        @GetMapping("/dashboard")
+        public ResponseEntity<Object> getAdminDashboard() {
+                AdminDashboardResponse data = analyticsService.getAdminDashboard(TenantContext.getTenantId());
+                return ResponseEntity.ok(Map.of(
+                                "status", "Authorized",
+                                "message", "Welcome to Admin Dashboard",
+                                "data", data
+                ));
+        }
 
     /**
      * GET /api/admin/system-status

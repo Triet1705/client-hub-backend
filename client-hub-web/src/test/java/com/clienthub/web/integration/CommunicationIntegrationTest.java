@@ -74,6 +74,9 @@ public class CommunicationIntegrationTest {
     void setup() {
         TenantContext.setTenantId(TENANT_ID);
 
+        // Ensure clean notification state before each test (seed data or previous tests may leave rows)
+        JdbcTestUtils.deleteFromTables(jdbcTemplate, "notifications");
+
         client = createUser("client@test.com", "Client User", Role.CLIENT);
         freelancer = createUser("freelancer@test.com", "Freelancer User", Role.FREELANCER);
 
