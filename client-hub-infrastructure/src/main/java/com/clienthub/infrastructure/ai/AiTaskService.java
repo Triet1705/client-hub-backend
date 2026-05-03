@@ -37,8 +37,13 @@ public class AiTaskService {
     }
 
     public TaskDraftDto extractTaskFromPdf(MultipartFile file) {
-        String storedPath = fileStorageService.uploadFile(file, "requirements");
-        logger.info("PDF uploaded to storage: {}", storedPath);
+        // File archival is best-effort; extraction should not fail if storage is unavailable
+        try {
+            String storedPath = fileStorageService.uploadFile(file, "requirements");
+            logger.info("PDF uploaded to storage: {}", storedPath);
+        } catch (Exception e) {
+            logger.warn("File storage unavailable, skipping archival: {}", e.getMessage());
+        }
 
         String rawText = pdfExtractionService.extractTextFromPdf(file);
 
