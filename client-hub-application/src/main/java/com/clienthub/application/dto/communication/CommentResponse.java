@@ -2,6 +2,8 @@ package com.clienthub.application.dto.communication;
 
 import com.clienthub.application.dto.UserSummaryDto;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 public class CommentResponse {
     private Long id;
@@ -10,6 +12,7 @@ public class CommentResponse {
 
     private Long threadId; // Reference to container thread
     private boolean isDeleted;
+    private List<String> attachmentUrls = new ArrayList<>();
 
     private Instant createdAt;
     private Instant updatedAt;
@@ -30,6 +33,9 @@ public class CommentResponse {
 
     public boolean isDeleted() { return isDeleted; }
     public void setDeleted(boolean deleted) { isDeleted = deleted; }
+
+    public List<String> getAttachmentUrls() { return attachmentUrls; }
+    public void setAttachmentUrls(List<String> attachmentUrls) { this.attachmentUrls = attachmentUrls; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
