@@ -52,7 +52,7 @@ public class CommunicationService extends TenantAwareService {
     }
 
     @LogAudit(action = AuditAction.CREATE, entityType = "COMMENT", entityId = "#result.id")
-    public Comment postComment(CommentTargetType targetType, String targetId, String content, UUID authorId) {
+    public Comment postComment(CommentTargetType targetType, String targetId, String content, UUID authorId, java.util.List<String> attachmentUrls) {
         String tenantId = getCurrentTenantId();
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -68,6 +68,9 @@ public class CommunicationService extends TenantAwareService {
         comment.setContent(content);
         comment.setAuthor(author);
         comment.setThread(thread);
+        if (attachmentUrls != null) {
+            comment.setAttachmentUrls(attachmentUrls);
+        }
 
         Comment savedComment = commentRepository.save(comment);
 

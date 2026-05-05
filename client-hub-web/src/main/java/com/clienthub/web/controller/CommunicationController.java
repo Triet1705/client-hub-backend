@@ -49,7 +49,8 @@ public class CommunicationController {
                 request.getTargetType(),
                 request.getTargetId(),
                 request.getContent(),
-                currentUser.getId()
+                currentUser.getId(),
+                request.getAttachmentUrls()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED)
