@@ -40,6 +40,9 @@ public class Notification extends BaseEntity {
     @Column(name = "is_read", nullable = false)
     private boolean isRead = false;
 
+    @Column(name = "read_at")
+    private java.time.Instant readAt;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -63,4 +66,7 @@ public class Notification extends BaseEntity {
 
     public boolean isRead() { return isRead; }
     public void setRead(boolean read) { isRead = read; }
+
+    public java.time.Instant getReadAt() { return readAt; }
+    public void setReadAt(java.time.Instant readAt) { this.readAt = readAt; }
 }

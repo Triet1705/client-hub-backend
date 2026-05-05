@@ -56,6 +56,7 @@ public class NotificationService extends TenantAwareService {
 
         if (!notification.isRead()) {
             notification.setRead(true);
+            notification.setReadAt(java.time.Instant.now());
             notification = notificationRepository.save(notification);
         }
 
