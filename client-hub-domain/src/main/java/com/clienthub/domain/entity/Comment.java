@@ -6,6 +6,11 @@ import jakarta.validation.constraints.NotBlank;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "comments", indexes = {
@@ -27,6 +32,10 @@ public class Comment extends BaseEntity {
     @NotBlank
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "attachment_urls", columnDefinition = "jsonb")
+    private List<String> attachmentUrls = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false)
@@ -51,4 +60,6 @@ public class Comment extends BaseEntity {
     public void setThread(CommunicationThread thread) { this.thread = thread; }
     public boolean isDeleted() { return isDeleted; }
     public void setDeleted(boolean deleted) { isDeleted = deleted; }
+    public List<String> getAttachmentUrls() { return attachmentUrls; }
+    public void setAttachmentUrls(List<String> attachmentUrls) { this.attachmentUrls = attachmentUrls; }
 }
