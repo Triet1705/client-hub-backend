@@ -31,6 +31,10 @@ public class CommentMapperImpl implements CommentMapper {
             response.setAuthor(mapUserToSummary(comment.getAuthor()));
         }
 
+        if (comment.getAttachmentUrls() != null) {
+            response.setAttachmentUrls(comment.getAttachmentUrls());
+        }
+
         return response;
     }
 
@@ -42,6 +46,10 @@ public class CommentMapperImpl implements CommentMapper {
 
         Comment comment = new Comment();
         comment.setContent(request.getContent());
+
+        if (request.getAttachmentUrls() != null) {
+            comment.setAttachmentUrls(request.getAttachmentUrls());
+        }
 
         return comment;
     }

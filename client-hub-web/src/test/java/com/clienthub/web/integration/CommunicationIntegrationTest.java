@@ -160,6 +160,23 @@ public class CommunicationIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+            @Test
+            @DisplayName("Security: Project owner can access project comments")
+            void testAccessControl_ProjectOwnerAccess() throws Exception {
+                TenantContext.setTenantId(TENANT_ID);
+
+                CustomUserDetails userDetails = CustomUserDetails.build(client);
+                UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+                mockMvc.perform(get("/api/comments")
+                                .header("X-Tenant-ID", TENANT_ID)
+                                .with(authentication(auth))
+                                .param("targetType", "PROJECT")
+                                .param("targetId", project.getId().toString()))
+                        .andExpect(status().isOk());
+            }
+
     private void authenticateUser(User user) {
         CustomUserDetails userDetails = CustomUserDetails.build(user);
         UsernamePasswordAuthenticationToken authentication =
