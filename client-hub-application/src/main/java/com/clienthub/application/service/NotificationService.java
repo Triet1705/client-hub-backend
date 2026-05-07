@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -65,7 +66,7 @@ public class NotificationService extends TenantAwareService {
 
     public MarkAllReadResponse markAllAsRead(UUID recipientId) {
         String tenantId = getCurrentTenantId();
-        int updatedCount = notificationRepository.markAllAsReadByRecipientAndTenant(recipientId, tenantId);
+        int updatedCount = notificationRepository.markAllAsReadByRecipientAndTenant(recipientId, tenantId, Instant.now());
         return new MarkAllReadResponse(updatedCount);
     }
 

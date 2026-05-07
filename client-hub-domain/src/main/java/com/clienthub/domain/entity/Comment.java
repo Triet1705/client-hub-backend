@@ -34,7 +34,7 @@ public class Comment extends BaseEntity {
     private String content;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "attachment_urls", columnDefinition = "jsonb")
+    @Column(name = "attachment_urls")
     private List<String> attachmentUrls = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)

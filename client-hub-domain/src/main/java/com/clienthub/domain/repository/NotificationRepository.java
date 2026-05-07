@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -32,8 +33,12 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countByRecipientIdAndTenantIdAndIsReadFalse(UUID recipientId, String tenantId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("UPDATE Notification n SET n.isRead = true, n.readAt = CURRENT_TIMESTAMP WHERE n.recipient.id = :recipientId AND n.tenantId = :tenantId AND n.isRead = false")
-    int markAllAsReadByRecipientAndTenant(@Param("recipientId") UUID recipientId, @Param("tenantId") String tenantId);
+        @Query("UPDATE Notification n SET n.isRead = true, n.readAt = :readAt WHERE n.recipient.id = :recipientId AND n.tenantId = :tenantId AND n.isRead = false")
+        int markAllAsReadByRecipientAndTenant(
+            @Param("recipientId") UUID recipientId,
+            @Param("tenantId") String tenantId,
+            @Param("readAt") Instant readAt
+        );
 
     @Modifying
     @Query("DELETE FROM Notification n WHERE n.isRead = true AND n.readAt < :cutoffDate")

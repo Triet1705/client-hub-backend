@@ -30,9 +30,9 @@ public class NotificationCleanupJob {
     public void deleteOldReadNotifications() {
         Instant cutoffDate = Instant.now().minus(3, ChronoUnit.DAYS);
         logger.info("Starting cleanup of read notifications older than: {}", cutoffDate);
-        
+
         int deletedCount = notificationRepository.deleteOldReadNotifications(cutoffDate);
-        
+
         logger.info("Successfully deleted {} old read notifications.", deletedCount);
     }
 }
