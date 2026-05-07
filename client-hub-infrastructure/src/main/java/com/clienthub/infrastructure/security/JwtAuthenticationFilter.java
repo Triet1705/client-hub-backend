@@ -50,13 +50,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             // Early return if no token or invalid token
             if (!StringUtils.hasText(jwt) || !tokenProvider.validateToken(jwt)) {
-                filterChain.doFilter(request, response);
                 return;
             }
 
             // Skip if already authenticated (avoid redundant database queries)
             if (SecurityContextHolder.getContext().getAuthentication() != null) {
-                filterChain.doFilter(request, response);
                 return;
             }
 
@@ -64,7 +62,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             TokenType tokenType = tokenProvider.extractTokenType(jwt);
             if (tokenType != TokenType.ACCESS) {
                 log.warn("Rejected non-ACCESS token type: {}", tokenType);
-                filterChain.doFilter(request, response);
                 return;
             }
 
@@ -106,10 +103,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } catch (Exception ex) {
             log.error("Unexpected error during authentication", ex);
         } finally {
+            filterChain.doFilter(request, response);
             TenantContext.clear();
         }
-
-        filterChain.doFilter(request, response);
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

@@ -161,19 +161,25 @@ public class CommunicationService extends TenantAwareService {
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
 
-        boolean isOwner = project.getOwner().getId().equals(userId);
+        User projectOwner = project.getOwner();
+        if (projectOwner == null) {
+            throw new ResourceNotFoundException("Project owner not configured");
+        }
+
+        boolean isOwner = projectOwner.getId().equals(userId);
 
         boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
             projectId, userId, tenantId);
 
         if (!isOwner && !isMember) {
-            User user = userRepository.findById(userId).orElseThrow();
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
             if (user.getRole() != Role.ADMIN) {
-            throw new AccessDeniedException("You are not a member of this project (Owner or Explicit Member)");
+                throw new AccessDeniedException("You are not a member of this project (Owner or Explicit Member)");
             }
         }
 
-        return isOwner ? null : project.getOwner();
+        return isOwner ? null : projectOwner;
     }
 
     private User validateTaskAccess(UUID taskId, String tenantId, UUID userId) {

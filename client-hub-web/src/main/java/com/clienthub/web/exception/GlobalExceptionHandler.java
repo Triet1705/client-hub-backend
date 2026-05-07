@@ -133,6 +133,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ErrorResponse> handleSecurityException(SecurityException ex) {
+        log.warn("Security violation: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Access Denied",
+                "You do not have permission to access this resource",
+                HttpStatus.FORBIDDEN.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericError(Exception ex) {
         log.error("Unexpected error occurred", ex);
