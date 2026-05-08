@@ -1,7 +1,7 @@
 package com.clienthub.infrastructure.ai;
 
 import com.clienthub.domain.enums.TaskPriority;
-import com.clienthub.infrastructure.exception.AiServiceUnavailableException;
+
 import com.clienthub.infrastructure.storage.FileStorageService;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -163,7 +163,7 @@ public class AiTaskService {
                 logger.warn("Attempt {}: JSON parse failed — {}", attempt, e.getMessage());
             } catch (RestClientException e) {
                 logger.error("AI Service Unavailable: {}", e.getMessage());
-                throw new AiServiceUnavailableException("AI Service is unreachable", e);
+                throw new com.clienthub.infrastructure.exception.AiServiceUnavailableException("AI Service is unreachable", e);
             } catch (Exception e) {
                 logger.error("AI Service Error on attempt {}: {}", attempt, e.getMessage());
             }
