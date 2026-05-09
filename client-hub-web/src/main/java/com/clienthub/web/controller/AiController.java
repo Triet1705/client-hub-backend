@@ -1,6 +1,6 @@
 package com.clienthub.web.controller;
 
-import com.clienthub.infrastructure.ai.TaskDraftDto;
+import com.clienthub.infrastructure.ai.TaskExtractionResult;
 import com.clienthub.infrastructure.ai.AiTaskService;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,19 +27,20 @@ public class AiController {
         this.aiTaskService = aiTaskService;
     }
 
-    @Operation(summary = "Extract Task from PDF", description = "Uploads a PDF requirement file, extracts text, and uses AI to generate a task draft.")
-    @ApiResponse(responseCode = "200", description = "Task draft generated successfully",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TaskDraftDto.class)))
+    @Operation(summary = "Extract Tasks from PDF", description = "Uploads a PDF requirement file, extracts text, and uses AI to generate multiple task drafts with confidence scores.")
+    @ApiResponse(responseCode = "200", description = "Tasks extracted successfully",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TaskExtractionResult.class)))
     @ApiResponse(responseCode = "400", description = "Invalid file format")
     @ApiResponse(responseCode = "422", description = "Could not process PDF (Encrypted/Scanned)")
+    @ApiResponse(responseCode = "503", description = "AI service unavailable")
     @PostMapping(value = "/extract-task", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
-    public ResponseEntity<TaskDraftDto> extractTaskFromPdf(
+    public ResponseEntity<TaskExtractionResult> extractTaskFromPdf(
             @Parameter(description = "PDF file to analyze", required = true)
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
 
-        TaskDraftDto taskDraft = aiTaskService.extractTaskFromPdf(file);
-        return ResponseEntity.ok(taskDraft);
+        TaskExtractionResult result = aiTaskService.extractTaskFromPdf(file);
+        return ResponseEntity.ok(result);
     }
 }
