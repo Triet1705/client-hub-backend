@@ -146,6 +146,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
+    @ExceptionHandler(com.clienthub.infrastructure.exception.PdfProcessingException.class)
+    public ResponseEntity<ErrorResponse> handlePdfProcessing(com.clienthub.infrastructure.exception.PdfProcessingException ex) {
+        log.warn("PDF processing error: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "PDF Processing Failed",
+                ex.getMessage(),
+                HttpStatus.UNPROCESSABLE_ENTITY.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
+    }
+
+    @ExceptionHandler(com.clienthub.infrastructure.exception.AiServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleAiUnavailable(com.clienthub.infrastructure.exception.AiServiceUnavailableException ex) {
+        log.error("AI service unavailable: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "AI Service Unavailable",
+                "The AI service is temporarily unavailable. Please try again later.",
+                HttpStatus.SERVICE_UNAVAILABLE.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericError(Exception ex) {
         log.error("Unexpected error occurred", ex);
