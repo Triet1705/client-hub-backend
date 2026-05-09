@@ -2,8 +2,6 @@ package com.clienthub.web.exception;
 
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
-import com.clienthub.infrastructure.exception.AiServiceUnavailableException;
-import com.clienthub.infrastructure.exception.PdfProcessingException;
 import com.clienthub.web.dto.common.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,32 +144,6 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-    }
-
-    @ExceptionHandler(PdfProcessingException.class)
-    public ResponseEntity<ErrorResponse> handlePdfProcessingException(PdfProcessingException ex) {
-        log.warn("PDF processing error: {}", ex.getMessage());
-
-        ErrorResponse response = new ErrorResponse(
-                "Unprocessable Entity",
-                ex.getMessage(),
-                HttpStatus.UNPROCESSABLE_ENTITY.value()
-        );
-
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(response);
-    }
-
-    @ExceptionHandler(AiServiceUnavailableException.class)
-    public ResponseEntity<ErrorResponse> handleAiServiceUnavailable(AiServiceUnavailableException ex) {
-        log.error("AI service unavailable: {}", ex.getMessage());
-
-        ErrorResponse response = new ErrorResponse(
-                "Service Unavailable",
-                "The AI service is currently unreachable. Please try again later.",
-                HttpStatus.SERVICE_UNAVAILABLE.value()
-        );
-
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
     @ExceptionHandler(Exception.class)
