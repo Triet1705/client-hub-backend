@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
-@Component
 public class JwtTokenProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);

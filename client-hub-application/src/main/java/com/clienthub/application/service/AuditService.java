@@ -49,11 +49,13 @@ public class AuditService extends TenantAwareService {
 
             UUID userId = null;
             String userEmail = "SYSTEM";
+            String userRole = "SYSTEM";
 
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof CustomUserDetails userDetails) {
                 userId = userDetails.getId();
                 userEmail = userDetails.getEmail();
+                userRole = userDetails.getRole() != null ? userDetails.getRole() : "UNKNOWN";
             }
 
             String oldValJson = oldEntity != null ? serialize(oldEntity) : null;
@@ -65,6 +67,7 @@ public class AuditService extends TenantAwareService {
                     tenantId,
                     userId,
                     userEmail,
+                    userRole,
                     action,
                     entityType,
                     entityId,
