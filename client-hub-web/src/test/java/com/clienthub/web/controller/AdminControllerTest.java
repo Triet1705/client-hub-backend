@@ -20,85 +20,87 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("h2test")
 @DisplayName("AdminController RBAC Security Tests")
 public class AdminControllerTest {
-    
+
     @Autowired
     private MockMvc mockMvc;
 
-    // ========== /api/admin/dashboard Tests ==========
-    
+    // ========== /api/admin/analytics Tests ==========
+
     @Test
-    @DisplayName("Dashboard - Admin role should return 200 OK")
+    @DisplayName("Analytics - Admin role should return 200 OK")
     @WithMockUser(username = "admin@test.com", roles = "ADMIN")
     void testGetDashboard_WithAdminRole_ShouldReturnOk() throws Exception {
-        mockMvc.perform(get("/api/admin/dashboard"))
+        mockMvc.perform(get("/api/admin/analytics"))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("Authorized"))
-                .andExpect(jsonPath("$.message").value("Welcome to Admin Dashboard"));
+                .andExpect(jsonPath("$.totalUsers").isNumber())
+                .andExpect(jsonPath("$.totalProjects").isNumber())
+                .andExpect(jsonPath("$.totalInvoices").isNumber())
+                .andExpect(jsonPath("$.systemHealth").isString());
     }
 
     @Test
-    @DisplayName("Dashboard - Client role should return 403 Forbidden")
+    @DisplayName("Analytics - Client role should return 403 Forbidden")
     @WithMockUser(username = "client@test.com", roles = "CLIENT")
     void testGetDashboard_WithClientRole_ShouldReturnForbidden() throws Exception {
-        mockMvc.perform(get("/api/admin/dashboard"))
+        mockMvc.perform(get("/api/admin/analytics"))
                 .andDo(print())
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("Dashboard - Freelancer role should return 403 Forbidden")
+    @DisplayName("Analytics - Freelancer role should return 403 Forbidden")
     @WithMockUser(username = "freelancer@test.com", roles = "FREELANCER")
     void testGetDashboard_WithFreelancerRole_ShouldReturnForbidden() throws Exception {
-        mockMvc.perform(get("/api/admin/dashboard"))
+        mockMvc.perform(get("/api/admin/analytics"))
                 .andDo(print())
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("Dashboard - Unauthenticated user should return 401 Unauthorized")
+    @DisplayName("Analytics - Unauthenticated user should return 401 Unauthorized")
     void testGetDashboard_WithoutAuthentication_ShouldReturnUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/admin/dashboard"))
+        mockMvc.perform(get("/api/admin/analytics"))
                 .andDo(print())
                 .andExpect(status().isUnauthorized());
     }
 
-    // ========== /api/admin/system-status Tests ==========
-    
+    // ========== /api/admin/health Tests ==========
+
     @Test
-    @DisplayName("System Status - Admin role should return 200 OK")
+    @DisplayName("Health - Admin role should return 200 OK")
     @WithMockUser(username = "admin@test.com", roles = "ADMIN")
     void testGetSystemStatus_WithAdminRole_ShouldReturnOk() throws Exception {
-        mockMvc.perform(get("/api/admin/system-status"))
+        mockMvc.perform(get("/api/admin/health"))
                 .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.system").value("Client Hub Core"))
-                .andExpect(jsonPath("$.health").value("Stable"))
-                .andExpect(jsonPath("$.active_connections").value(1));
+                .andExpect(jsonPath("$.overallStatus").isString())
+                .andExpect(jsonPath("$.database").exists())
+                .andExpect(jsonPath("$.redis").exists());
     }
 
     @Test
-    @DisplayName("System Status - Client role should return 403 Forbidden")
+    @DisplayName("Health - Client role should return 403 Forbidden")
     @WithMockUser(username = "client@test.com", roles = "CLIENT")
     void testGetSystemStatus_WithClientRole_ShouldReturnForbidden() throws Exception {
-        mockMvc.perform(get("/api/admin/system-status"))
+        mockMvc.perform(get("/api/admin/health"))
                 .andDo(print())
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("System Status - Freelancer role should return 403 Forbidden")
+    @DisplayName("Health - Freelancer role should return 403 Forbidden")
     @WithMockUser(username = "freelancer@test.com", roles = "FREELANCER")
     void testGetSystemStatus_WithFreelancerRole_ShouldReturnForbidden() throws Exception {
-        mockMvc.perform(get("/api/admin/system-status"))
+        mockMvc.perform(get("/api/admin/health"))
                 .andDo(print())
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("System Status - Unauthenticated user should return 401 Unauthorized")
+    @DisplayName("Health - Unauthenticated user should return 401 Unauthorized")
     void testGetSystemStatus_WithoutAuthentication_ShouldReturnUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/admin/system-status"))
+        mockMvc.perform(get("/api/admin/health"))
                 .andDo(print())
                 .andExpect(status().isUnauthorized());
     }
