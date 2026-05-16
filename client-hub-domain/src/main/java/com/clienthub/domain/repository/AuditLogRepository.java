@@ -20,4 +20,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     );
 
     List<AuditLog> findByIsAnchoredFalse(Pageable pageable);
+
+    Page<AuditLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

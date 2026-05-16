@@ -32,6 +32,9 @@ public class AuditLog {
     @Column(name = "user_email", length = 100)
     private String userEmail;
 
+    @Column(name = "user_role", length = 20)
+    private String userRole;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private AuditAction action;
@@ -69,13 +72,14 @@ public class AuditLog {
 
     public AuditLog() {}
 
-    public AuditLog(String tenantId, UUID userId, String userEmail, AuditAction action,
+    public AuditLog(String tenantId, UUID userId, String userEmail, String userRole, AuditAction action,
                     String entityType, String entityId,
                     String oldValue, String newValue,
                     String ipAddress, String dataHash) {
         this.tenantId = tenantId;
         this.userId = userId;
         this.userEmail = userEmail;
+        this.userRole = userRole;
         this.action = action;
         this.entityType = entityType;
         this.entityId = entityId;
@@ -90,6 +94,7 @@ public class AuditLog {
     public String getTenantId() { return tenantId; }
     public UUID getUserId() { return userId; }
     public String getUserEmail() { return userEmail; }
+    public String getUserRole() { return userRole; }
     public AuditAction getAction() { return action; }
     public String getEntityType() { return entityType; }
     public String getEntityId() { return entityId; }
