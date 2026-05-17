@@ -23,7 +23,7 @@ public class JwtTokenProvider {
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
     private static final String CLAIM_IMPERSONATOR_ID = "impersonator_id";
 
-    @Value("${jwt.secret:default_secret_key_must_be_at_least_32_characters_long_for_hs256}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.expiration:900000}") // 15 minutes default
