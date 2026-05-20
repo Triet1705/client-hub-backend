@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import jakarta.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
@@ -31,6 +32,17 @@ public class JwtTokenProvider {
 
     @Value("${jwt.refresh-expiration:604800000}") // 7 days default
     private long refreshExpirationMs;
+
+    @PostConstruct
+    public void init() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            logger.warn("⚠️ JWT_SECRET is missing! Generating a random volatile secret. Tokens will be invalidated on restart.");
+            jwtSecret = UUID.randomUUID().toString() + UUID.randomUUID().toString();
+        } else if (jwtSecret.length() < 32) {
+            logger.warn("⚠️ JWT_SECRET is too short (< 32 chars)! Generating a random volatile secret for safety.");
+            jwtSecret = UUID.randomUUID().toString() + UUID.randomUUID().toString();
+        }
+    }
 
     /**
      * Generate secret key from configured secret string
