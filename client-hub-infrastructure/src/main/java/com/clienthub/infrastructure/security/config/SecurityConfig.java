@@ -64,8 +64,6 @@ public class SecurityConfig {
 
                 // Security Headers
                 .headers(headers -> headers
-                        .contentTypeOptions(contentTypeOptions -> contentTypeOptions.disable())
-                        .xssProtection(xss -> xss.disable())
                         .frameOptions(frame -> frame.deny())
                 )
 
@@ -76,7 +74,7 @@ public class SecurityConfig {
 
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/health").permitAll()
 
                         .anyRequest().authenticated()
                 )
