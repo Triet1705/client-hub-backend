@@ -156,8 +156,12 @@ public class InvoiceService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public List<InvoiceResponse> getAllInvoices(InvoiceStatus status, UUID projectId) {
+    public List<InvoiceResponse> getAllInvoices(InvoiceStatus status, UUID projectId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
+
+        User currentUser = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
 
         List<Invoice> invoices;
         if (projectId != null && status != null) {
@@ -177,6 +181,9 @@ public class InvoiceService extends TenantAwareService {
         }
 
         return invoices.stream()
+                .filter(invoice -> isAdmin || 
+                        invoice.getClient().getId().equals(currentUserId) || 
+                        invoice.getFreelancer().getId().equals(currentUserId))
                 .map(invoiceMapper::toResponse)
                 .collect(Collectors.toList());
     }
