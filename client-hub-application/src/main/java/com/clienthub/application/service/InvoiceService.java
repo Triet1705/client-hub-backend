@@ -3,16 +3,21 @@ package com.clienthub.application.service;
 import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.Invoice;
 import com.clienthub.domain.entity.Project;
+import com.clienthub.domain.entity.ProjectMember;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.InvoiceStatus;
+import com.clienthub.domain.enums.PaymentMethod;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.application.dto.invoice.InvoiceRequest;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.mapper.InvoiceMapper;
 import com.clienthub.domain.repository.InvoiceRepository;
+import com.clienthub.domain.repository.ProjectMemberRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,36 +31,51 @@ public class InvoiceService extends TenantAwareService {
 
     private final InvoiceRepository invoiceRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final InvoiceMapper invoiceMapper;
     private final NotificationProducerService notificationProducerService;
 
+    @Value("${blockchain.enabled:false}")
+    private boolean blockchainEnabled;
+
     public InvoiceService(InvoiceRepository invoiceRepository,
                           ProjectRepository projectRepository,
+                          ProjectMemberRepository projectMemberRepository,
                           UserRepository userRepository,
                           InvoiceMapper invoiceMapper,
                           NotificationProducerService notificationProducerService) {
         this.invoiceRepository = invoiceRepository;
         this.projectRepository = projectRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.invoiceMapper = invoiceMapper;
         this.notificationProducerService = notificationProducerService;
     }
 
-    public InvoiceResponse createInvoice(InvoiceRequest request, UUID freelancerId) {
+    public InvoiceResponse createInvoice(InvoiceRequest request, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
 
-        Project project = projectRepository.findById(request.getProjectId())
-                .filter(p -> p.getTenantId().equals(tenantId))
+        Project project = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found or access denied"));
 
-        User client = userRepository.findById(request.getClientId())
-                .filter(u -> u.getTenantId().equals(tenantId))
-                .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        User freelancer = userRepository.findById(freelancerId)
-                .filter(u -> u.getTenantId().equals(tenantId))
-                .orElseThrow(() -> new ResourceNotFoundException("Freelancer profile not found"));
+        if (currentUser.getRole() == Role.FREELANCER) {
+            throw new AccessDeniedException("Freelancers cannot create invoices");
+        }
+
+        PaymentMethod paymentMethod = request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.FIAT;
+        if (paymentMethod == PaymentMethod.CRYPTO_ESCROW && !blockchainEnabled) {
+            throw new IllegalArgumentException("Crypto escrow invoices are disabled");
+        }
+        if (paymentMethod == PaymentMethod.CRYPTO_ESCROW && !isValidWalletAddress(request.getFreelancerWalletAddress())) {
+            throw new IllegalArgumentException("A valid freelancer wallet address is required for crypto escrow invoices");
+        }
+
+        User client = resolveInvoiceClient(request, project, currentUser, tenantId);
+        User freelancer = resolveProjectFreelancer(project, tenantId);
 
         Invoice invoice = invoiceMapper.toEntity(request);
 
@@ -63,11 +83,47 @@ public class InvoiceService extends TenantAwareService {
         invoice.setClient(client);
         invoice.setFreelancer(freelancer);
 
-        invoice.setStatus(InvoiceStatus.DRAFT);
+        invoice.setStatus(paymentMethod == PaymentMethod.CRYPTO_ESCROW
+                ? InvoiceStatus.CRYPTO_ESCROW_WAITING
+                : InvoiceStatus.DRAFT);
         invoice.setTenantId(tenantId);
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
         return invoiceMapper.toResponse(savedInvoice);
+    }
+
+    private User resolveInvoiceClient(InvoiceRequest request, Project project, User currentUser, String tenantId) {
+        if (currentUser.getRole() == Role.ADMIN) {
+            if (request.getClientId() != null) {
+                User requestedClient = userRepository.findByIdAndTenantId(request.getClientId(), tenantId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Client not found"));
+                if (requestedClient.getRole() != Role.CLIENT) {
+                    throw new IllegalArgumentException("Invoice client must have CLIENT role");
+                }
+                if (!project.getOwner().getId().equals(requestedClient.getId())) {
+                    throw new AccessDeniedException("Invoice client must be the project owner");
+                }
+                return requestedClient;
+            }
+            return project.getOwner();
+        }
+
+        if (!project.getOwner().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Clients can only create invoices for their own projects");
+        }
+        return currentUser;
+    }
+
+    private User resolveProjectFreelancer(Project project, String tenantId) {
+        return projectMemberRepository.findByIdProjectIdAndTenantId(project.getId(), tenantId).stream()
+                .map(ProjectMember::getUser)
+                .filter(user -> user.getRole() == Role.FREELANCER)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Project must have a freelancer member before creating an invoice"));
+    }
+
+    private boolean isValidWalletAddress(String walletAddress) {
+        return walletAddress != null && walletAddress.matches("^0x[a-fA-F0-9]{40}$");
     }
 
     @Transactional(readOnly = true)
@@ -85,7 +141,7 @@ public class InvoiceService extends TenantAwareService {
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         if (currentUser.getRole() == Role.ADMIN) {
@@ -123,7 +179,7 @@ public class InvoiceService extends TenantAwareService {
 
         InvoiceStatus oldStatus = invoice.getStatus();
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
@@ -159,7 +215,7 @@ public class InvoiceService extends TenantAwareService {
     public List<InvoiceResponse> getAllInvoices(InvoiceStatus status, UUID projectId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
 
-        User currentUser = userRepository.findById(currentUserId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
 

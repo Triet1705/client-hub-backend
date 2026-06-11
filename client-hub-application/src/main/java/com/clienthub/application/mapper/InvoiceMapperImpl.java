@@ -17,6 +17,7 @@ public class InvoiceMapperImpl implements InvoiceMapper {
         InvoiceResponse response = new InvoiceResponse();
         response.setId(invoice.getId());
         response.setTitle(invoice.getTitle());
+        response.setDescription(invoice.getDescription());
         response.setAmount(invoice.getAmount());
         response.setDueDate(invoice.getDueDate());
         response.setStatus(invoice.getStatus());
@@ -26,6 +27,7 @@ public class InvoiceMapperImpl implements InvoiceMapper {
         response.setWalletAddress(invoice.getWalletAddress());
         response.setEscrowStatus(invoice.getEscrowStatus());
         response.setConfirmations(invoice.getConfirmations());
+        response.setPaidAt(invoice.getPaidAt());
 
         if (invoice.getProject() != null) {
             response.setProjectId(invoice.getProject().getId());
@@ -55,14 +57,15 @@ public class InvoiceMapperImpl implements InvoiceMapper {
 
         Invoice invoice = new Invoice();
         invoice.setTitle(request.getTitle());
+        invoice.setDescription(request.getDescription());
         invoice.setAmount(request.getAmount());
         invoice.setDueDate(request.getDueDate());
         
         if (request.getPaymentMethod() != null) {
             invoice.setPaymentMethod(request.getPaymentMethod());
         }
-        if (request.getClientWalletAddress() != null) {
-            invoice.setWalletAddress(request.getClientWalletAddress());
+        if (request.getFreelancerWalletAddress() != null) {
+            invoice.setWalletAddress(request.getFreelancerWalletAddress());
         }
 
         return invoice;
@@ -77,6 +80,9 @@ public class InvoiceMapperImpl implements InvoiceMapper {
         if (request.getTitle() != null) {
             invoice.setTitle(request.getTitle());
         }
+        if (request.getDescription() != null) {
+            invoice.setDescription(request.getDescription());
+        }
         if (request.getAmount() != null) {
             invoice.setAmount(request.getAmount());
         }
@@ -86,8 +92,8 @@ public class InvoiceMapperImpl implements InvoiceMapper {
         if (request.getPaymentMethod() != null) {
             invoice.setPaymentMethod(request.getPaymentMethod());
         }
-        if (request.getClientWalletAddress() != null) {
-            invoice.setWalletAddress(request.getClientWalletAddress());
+        if (request.getFreelancerWalletAddress() != null) {
+            invoice.setWalletAddress(request.getFreelancerWalletAddress());
         }
     }
 }

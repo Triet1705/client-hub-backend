@@ -15,6 +15,8 @@ public class InvoiceRequest {
     @NotBlank(message = "Invoice title is required")
     private String title;
 
+    private String description;
+
     @NotNull(message = "Amount is required")
     @Min(value = 1, message = "Amount must be greater than 0")
     private BigInteger amount;
@@ -26,12 +28,11 @@ public class InvoiceRequest {
     @NotNull(message = "Project ID is required")
     private UUID projectId;
 
-    @NotNull(message = "Client ID is required")
     private UUID clientId;
 
     private PaymentMethod paymentMethod;
 
-    private String clientWalletAddress;
+    private String freelancerWalletAddress;
 
     public String getTitle() {
         return title;
@@ -39,6 +40,14 @@ public class InvoiceRequest {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public BigInteger getAmount() {
@@ -81,18 +90,19 @@ public class InvoiceRequest {
         this.paymentMethod = paymentMethod;
     }
 
-    public String getClientWalletAddress() {
-        return clientWalletAddress;
+    public String getFreelancerWalletAddress() {
+        return freelancerWalletAddress;
     }
 
-    public void setClientWalletAddress(String clientWalletAddress) {
-        this.clientWalletAddress = clientWalletAddress;
+    public void setFreelancerWalletAddress(String freelancerWalletAddress) {
+        this.freelancerWalletAddress = freelancerWalletAddress;
     }
 
     @Override
     public String toString() {
         return "InvoiceRequest{" +
                 "title='" + title + '\'' +
+                ", description='" + description + '\'' +
                 ", amount=" + amount +
                 ", dueDate=" + dueDate +
                 ", projectId=" + projectId +

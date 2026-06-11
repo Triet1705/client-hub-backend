@@ -12,6 +12,7 @@ import java.util.UUID;
 public class InvoiceResponse {
     private Long id;
     private String title;
+    private String description;
     private BigInteger amount;
     private LocalDate dueDate;
 
@@ -27,6 +28,7 @@ public class InvoiceResponse {
     private String walletAddress;
     private EscrowStatus escrowStatus;
     private Integer confirmations;
+    private Instant paidAt;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -44,6 +46,14 @@ public class InvoiceResponse {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public BigInteger getAmount() {
@@ -140,6 +150,14 @@ public class InvoiceResponse {
 
     public void setConfirmations(Integer confirmations) {
         this.confirmations = confirmations;
+    }
+
+    public Instant getPaidAt() {
+        return paidAt;
+    }
+
+    public void setPaidAt(Instant paidAt) {
+        this.paidAt = paidAt;
     }
 
     public Instant getCreatedAt() {

@@ -26,7 +26,7 @@ public class InvoiceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('FREELANCER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<InvoiceResponse> createInvoice(
             @Valid @RequestBody InvoiceRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
@@ -65,5 +65,19 @@ public class InvoiceController {
             @RequestParam(required = false) UUID projectId,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         return ResponseEntity.ok(invoiceService.getAllInvoices(status, projectId, currentUser.getId()));
+    }
+
+    @GetMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<?> getInvoiceStatus(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        // Just reuse the standard getInvoiceById logic but return a smaller payload for polling
+        InvoiceResponse response = invoiceService.getInvoiceByIdWithOwnershipCheck(id, currentUser.getId());
+        return ResponseEntity.ok(java.util.Map.of(
+                "id", response.getId(),
+                "status", response.getStatus(),
+                "escrowStatus", response.getEscrowStatus() != null ? response.getEscrowStatus() : "NOT_STARTED"
+        ));
     }
 }
