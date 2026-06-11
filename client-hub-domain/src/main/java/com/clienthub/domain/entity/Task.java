@@ -62,9 +62,6 @@ public class Task extends BaseEntity {
     @Column(name = "due_date")
     private LocalDateTime dueDate;
 
-    @Column(name = "tenant_id", nullable = false)
-    private String tenantId;
-
     @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
 
@@ -88,7 +85,7 @@ public class Task extends BaseEntity {
         this.estimatedHours = estimatedHours;
         this.actualHours = actualHours;
         this.dueDate = dueDate;
-        this.tenantId = tenantId;
+        this.setTenantId(tenantId);
         this.isDeleted = isDeleted;
         this.deletedAt = deletedAt;
     }
@@ -122,9 +119,6 @@ public class Task extends BaseEntity {
 
     public LocalDateTime getDueDate() { return dueDate; }
     public void setDueDate(LocalDateTime dueDate) { this.dueDate = dueDate; }
-
-    public String getTenantId() { return tenantId; }
-    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
 
     public boolean isDeleted() { return isDeleted; }
     public void setDeleted(boolean deleted) { isDeleted = deleted; }
