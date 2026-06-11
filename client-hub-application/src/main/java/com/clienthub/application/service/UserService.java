@@ -114,6 +114,18 @@ public class UserService {
         }
     }
 
+    @Transactional
+    public void updateWalletAddress(UUID userId, String walletAddress) {
+        if (walletAddress == null || !walletAddress.matches("^0x[a-fA-F0-9]{40}$")) {
+            throw new IllegalArgumentException("Invalid Ethereum wallet address");
+        }
+        String tenantId = TenantContext.getTenantId();
+        User user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        user.setWalletAddress(walletAddress);
+        userRepository.save(user);
+    }
+
     /**
      * TODO : Add last_login_at field to users table and update in AuthService.login()
      * TODO : Implement activeSessionCounts by injecting RefreshTokenRepository
