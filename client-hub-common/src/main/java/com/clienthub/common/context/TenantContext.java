@@ -6,10 +6,20 @@ import org.slf4j.LoggerFactory;
 public final class TenantContext {
     private static final Logger log = LoggerFactory.getLogger(TenantContext.class);
     private static final ThreadLocal<String> CURRENT_TENANT = ThreadLocal.withInitial(() -> null);
+    public static final String SYSTEM_TENANT = "SYSTEM";
 
     // Private constructor to prevent instantiation
     private TenantContext() {
         throw new AssertionError("Utility class - do not instantiate");
+    }
+
+    /** Set system-level context for cross-tenant background tasks. */
+    public static void setSystemContext() {
+        CURRENT_TENANT.set(SYSTEM_TENANT);
+    }
+
+    public static boolean isSystemContext() {
+        return SYSTEM_TENANT.equals(CURRENT_TENANT.get());
     }
 
     public static void setTenantId(String tenantId) {

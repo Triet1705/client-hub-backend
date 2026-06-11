@@ -63,6 +63,10 @@ public class AuthService {
             throw new IllegalArgumentException("ADMIN accounts must be created by an existing administrator.");
         }
 
+        if (com.clienthub.common.context.TenantContext.SYSTEM_TENANT.equals(tenantId)) {
+            throw new IllegalArgumentException("Reserved tenant ID is not permitted.");
+        }
+
         User user = new User();
         user.setFullName(fullName);
         user.setEmail(email);

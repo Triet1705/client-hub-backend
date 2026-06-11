@@ -36,10 +36,16 @@ public class TenantAspect {
             throw new SecurityException("Tenant context missing. Access denied.");
         }
 
+        // 2. System-level bypass: skip Hibernate filter for cross-tenant system queries
+        if (TenantContext.isSystemContext()) {
+            log.debug("System-level access — tenant filter NOT applied");
+            return;
+        }
+
         try {
             Session session = entityManager.unwrap(Session.class);
 
-            // 2. Enable or Update Filter
+            // 3. Enable or Update Filter
             Filter filter = session.getEnabledFilter(TENANT_FILTER_NAME);
             
             if (filter == null) {
