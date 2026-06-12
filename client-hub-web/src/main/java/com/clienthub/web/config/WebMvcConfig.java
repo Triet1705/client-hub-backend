@@ -42,4 +42,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/uploads/attachments/**")
                 .addResourceLocations("file:" + uploadAbsolutePath + "/");
     }
+
+    @org.springframework.context.annotation.Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<jakarta.servlet.Filter> attachmentSecurityFilter() {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<jakarta.servlet.Filter> registrationBean = new org.springframework.boot.web.servlet.FilterRegistrationBean<>();
+        registrationBean.setFilter((request, response, chain) -> {
+            jakarta.servlet.http.HttpServletResponse res = (jakarta.servlet.http.HttpServletResponse) response;
+            res.setHeader("Content-Disposition", "attachment");
+            res.setHeader("X-Content-Type-Options", "nosniff");
+            chain.doFilter(request, response);
+        });
+        registrationBean.addUrlPatterns("/uploads/attachments/*");
+        return registrationBean;
+    }
 }

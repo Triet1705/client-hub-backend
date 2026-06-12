@@ -57,6 +57,9 @@ public class AttachmentService {
             String extension = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")) : "";
             String generatedFileName = fileId.toString() + extension;
             Path destinationFile = uploadPath.resolve(generatedFileName).normalize().toAbsolutePath();
+            if (!destinationFile.getParent().equals(uploadPath.toAbsolutePath())) {
+                throw new SecurityException("Cannot store file outside current directory.");
+            }
 
             Files.copy(file.getInputStream(), destinationFile, StandardCopyOption.REPLACE_EXISTING);
 

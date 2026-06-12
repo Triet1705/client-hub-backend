@@ -65,9 +65,11 @@ public class SecurityConfig {
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 )
 
-                // Security Headers
+                // Security Headers (Task 3.1)
                 .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; frame-ancestors 'none'; sandbox"))
                         .frameOptions(frame -> frame.deny())
+                        .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
                 )
 
                 .authorizeHttpRequests(auth -> auth
@@ -75,10 +77,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/system/config").permitAll()
-
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-
                         .requestMatchers("/actuator/health").permitAll()
+
+                        // Restrict Swagger to admins (Task 3.2)
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").hasAuthority("ADMIN_ALL")
 
                         .anyRequest().authenticated()
                 )
@@ -110,6 +112,7 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Request-ID", "X-Correlation-ID"));
         configuration.setExposedHeaders(List.of("X-Request-ID", "X-Correlation-ID"));
         configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L); // Task 3.3 / 6.2: Configure properly with max-age
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
