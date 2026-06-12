@@ -170,10 +170,18 @@ public class TaskService extends TenantAwareService {
     }
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
-    public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus) {
+    public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus, UUID currentUserId, Role currentUserRole) {
         String tenantId = getCurrentTenantId();
         Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+
+        boolean isProjectOwner = task.getProject().getOwner().getId().equals(currentUserId);
+        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUserId);
+        boolean isAdmin = currentUserRole == Role.ADMIN;
+
+        if (!isProjectOwner && !isAssignee && !isAdmin) {
+            throw new AccessDeniedException("Only Project Owner, Assignee, or Admin can update this task status.");
+        }
 
         TaskStatus oldStatus = task.getStatus();
 
