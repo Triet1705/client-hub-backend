@@ -97,6 +97,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- AOP for Tenant Connection Interceptor -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
