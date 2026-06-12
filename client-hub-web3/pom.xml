@@ -16,11 +16,64 @@
             <groupId>com.clienthub</groupId>
             <artifactId>client-hub-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.clienthub</groupId>
+            <artifactId>client-hub-domain</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
 
         <!-- Web3j Library -->
         <dependency>
             <groupId>org.web3j</groupId>
             <artifactId>core</artifactId>
+            <exclusions>
+                <!-- Exclude to prevent JDK 21 ExceptionInInitializerError / TypeTag::UNKNOWN -->
+                <exclusion>
+                    <groupId>com.squareup</groupId>
+                    <artifactId>javapoet</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.web3j</groupId>
+                <artifactId>web3j-maven-plugin</artifactId>
+                <version>4.9.8</version>
+                <executions>
+                    <execution>
+                        <id>generate-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate-sources</goal>
+                        </goals>
+                        <configuration>
+                            <packageName>com.clienthub.web3.generated</packageName>
+                            <sourceDestination>${project.build.directory}/generated-sources/web3j</sourceDestination>
+                            <nativeJavaType>true</nativeJavaType>
+                            <outputFormat>java</outputFormat>
+                            <soliditySourceFiles>
+                                <directory>${project.basedir}/src/main/resources/contracts</directory>
+                                <includes>
+                                    <include>**/*.sol</include>
+                                </includes>
+                            </soliditySourceFiles>
+                            <abiSourceFiles>
+                                <directory>${project.basedir}/src/main/resources/contracts</directory>
+                                <includes>
+                                    <include>**/*.abi</include>
+                                </includes>
+                            </abiSourceFiles>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

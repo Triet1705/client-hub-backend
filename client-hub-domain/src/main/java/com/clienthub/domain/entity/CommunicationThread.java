@@ -24,9 +24,6 @@ public class CommunicationThread extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "tenant_id", nullable = false)
-    private String tenantId;
-
     @NotBlank(message = "Thread topic is required")
     @Column(nullable = false, length = 200)
     private String topic;
@@ -51,8 +48,6 @@ public class CommunicationThread extends BaseEntity {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-    public String getTenantId() { return tenantId; }
-    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getTopic() { return topic; }
     public void setTopic(String topic) { this.topic = topic; }
     public ThreadStatus getStatus() { return status; }

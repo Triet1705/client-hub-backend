@@ -19,10 +19,6 @@ public class User extends BaseEntity {
     private UUID id;
 
     @NotBlank
-    @Column(name = "tenant_id", nullable = false)
-    private String tenantId;
-
-    @NotBlank
     @Email
     @Column(nullable = false)
     private String email;
@@ -63,7 +59,7 @@ public class User extends BaseEntity {
 
     public User(UUID id, String tenantId, String email, String password, String fullName, Role role, boolean active, String walletAddress) {
         this.id = id;
-        this.tenantId = tenantId;
+        this.setTenantId(tenantId);
         this.email = email;
         this.password = password;
         this.fullName = fullName;
@@ -76,14 +72,6 @@ public class User extends BaseEntity {
 
     public UUID getId() {
         return id;
-    }
-
-    public String getTenantId() {
-        return tenantId;
-    }
-
-    public void setTenantId(String tenantId) {
-        this.tenantId = tenantId;
     }
 
     public String getEmail() {
@@ -255,7 +243,7 @@ public class User extends BaseEntity {
     public String toString() {
         return "User{" +
                 "id='" + id + '\'' +
-                ", tenantId='" + tenantId + '\'' +
+                ", tenantId='" + getTenantId() + '\'' +
                 ", email='" + email + '\'' +
                 ", fullName='" + fullName + '\'' +
                 ", role=" + role +
