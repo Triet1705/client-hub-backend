@@ -42,11 +42,15 @@ public class RateLimitFilterTest {
     @Mock
     private FilterChain filterChain;
 
+    @Mock
+    private org.springframework.beans.factory.ObjectProvider<ProxyManager<byte[]>> proxyManagerProvider;
+
     private RateLimitFilter rateLimitFilter;
 
     @BeforeEach
     void setUp() {
-        rateLimitFilter = new RateLimitFilter(proxyManager, jwtTokenProvider);
+        when(proxyManagerProvider.getIfAvailable()).thenReturn(proxyManager);
+        rateLimitFilter = new RateLimitFilter(proxyManagerProvider, jwtTokenProvider);
         ReflectionTestUtils.setField(rateLimitFilter, "loginLimit", 5);
         ReflectionTestUtils.setField(rateLimitFilter, "registerLimit", 3);
         ReflectionTestUtils.setField(rateLimitFilter, "aiLimit", 10);

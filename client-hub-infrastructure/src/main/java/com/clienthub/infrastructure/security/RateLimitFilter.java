@@ -38,8 +38,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Value("${rate-limit.general:60}")
     private int generalLimit;
 
-    public RateLimitFilter(ProxyManager<byte[]> proxyManager, JwtTokenProvider tokenProvider) {
-        this.proxyManager = proxyManager;
+    public RateLimitFilter(org.springframework.beans.factory.ObjectProvider<ProxyManager<byte[]>> proxyManagerProvider, JwtTokenProvider tokenProvider) {
+        this.proxyManager = proxyManagerProvider.getIfAvailable();
         this.tokenProvider = tokenProvider;
     }
 
@@ -52,7 +52,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        if (path.startsWith("/api/")) {
+        if (proxyManager != null && path.startsWith("/api/")) {
             String key;
             int limit;
             

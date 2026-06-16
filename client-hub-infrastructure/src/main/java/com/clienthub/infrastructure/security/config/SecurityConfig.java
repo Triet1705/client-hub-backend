@@ -91,7 +91,7 @@ public class SecurityConfig {
 
                 .authenticationProvider(customAuthenticationProvider)
 
-                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
