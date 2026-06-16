@@ -54,7 +54,7 @@ public class CommunicationService extends TenantAwareService {
     @LogAudit(action = AuditAction.CREATE, entityType = "COMMENT", entityId = "#result.id")
     public Comment postComment(CommentTargetType targetType, String targetId, String content, UUID authorId, java.util.List<String> attachmentUrls) {
         String tenantId = getCurrentTenantId();
-        User author = userRepository.findById(authorId)
+        User author = userRepository.findByIdAndTenantId(authorId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         User recipientForNotification = validateAccessAndGetRecipient(targetType, targetId, tenantId, authorId);
@@ -119,7 +119,7 @@ public class CommunicationService extends TenantAwareService {
                 .filter(c -> c.getTenantId().equals(tenantId))
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found"));
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         boolean isAuthor = comment.getAuthor().getId().equals(userId);
@@ -172,7 +172,7 @@ public class CommunicationService extends TenantAwareService {
             projectId, userId, tenantId);
 
         if (!isOwner && !isMember) {
-            User user = userRepository.findById(userId)
+            User user = userRepository.findByIdAndTenantId(userId, tenantId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found"));
             if (user.getRole() != Role.ADMIN) {
                 throw new AccessDeniedException("You are not a member of this project (Owner or Explicit Member)");
@@ -193,7 +193,7 @@ public class CommunicationService extends TenantAwareService {
         boolean isOwner = projectOwner.getId().equals(userId);
 
         if (!isAssignee && !isOwner) {
-            User user = userRepository.findById(userId).orElseThrow();
+            User user = userRepository.findByIdAndTenantId(userId, tenantId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
             if (user.getRole() != Role.ADMIN) {
                 throw new AccessDeniedException("Only the assignee or project owner can comment on this task");
             }
@@ -214,7 +214,7 @@ public class CommunicationService extends TenantAwareService {
         boolean isFreelancer = freelancer.getId().equals(userId);
 
         if (!isClient && !isFreelancer) {
-            User user = userRepository.findById(userId).orElseThrow();
+            User user = userRepository.findByIdAndTenantId(userId, tenantId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
             if (user.getRole() != Role.ADMIN) {
                 throw new AccessDeniedException("Access denied to invoice comments");
             }

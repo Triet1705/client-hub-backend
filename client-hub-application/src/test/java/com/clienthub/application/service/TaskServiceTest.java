@@ -166,7 +166,7 @@ class TaskServiceTest {
         when(taskMapper.toResponse(task)).thenReturn(expectedResponse);
 
         // When
-        TaskResponse result = taskService.updateTaskStatus(TASK_ID, TaskStatus.IN_PROGRESS);
+        TaskResponse result = taskService.updateTaskStatus(TASK_ID, TaskStatus.IN_PROGRESS, USER_ID, Role.CLIENT);
 
         // Then
         assertNotNull(result);
@@ -187,7 +187,7 @@ class TaskServiceTest {
         when(taskRepository.save(task)).thenReturn(task);
         when(taskMapper.toResponse(task)).thenReturn(expectedResponse);
 
-        TaskResponse result = taskService.updateTaskStatus(TASK_ID, TaskStatus.DONE);
+        TaskResponse result = taskService.updateTaskStatus(TASK_ID, TaskStatus.DONE, USER_ID, Role.CLIENT);
 
         assertNotNull(result);
         verify(notificationProducerService).notifyTaskCompleted(task);
@@ -205,7 +205,7 @@ class TaskServiceTest {
 
         // When & Then
         assertThrows(InvalidTaskStateException.class, 
-            () -> taskService.updateTaskStatus(TASK_ID, TaskStatus.TODO));
+            () -> taskService.updateTaskStatus(TASK_ID, TaskStatus.TODO, USER_ID, Role.CLIENT));
         verify(taskRepository, never()).save(any());
     }
 
@@ -325,6 +325,17 @@ class TaskServiceTest {
         task.setTitle("Test Task");
         task.setStatus(TaskStatus.TODO);
         task.setPriority(TaskPriority.MEDIUM);
+        Project project = createProject(TENANT_ID);
+        User owner = User.builder()
+                .id(USER_ID)
+                .tenantId(TENANT_ID)
+                .email("owner@example.com")
+                .password("password")
+                .fullName("Owner User")
+                .role(Role.CLIENT)
+                .build();
+        project.setOwner(owner);
+        task.setProject(project);
         return task;
     }
 

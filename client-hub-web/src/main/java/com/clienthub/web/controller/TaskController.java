@@ -143,9 +143,10 @@ public class TaskController {
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
     public ResponseEntity<TaskResponse> updateTaskStatus(
             @PathVariable UUID id,
-            @RequestParam TaskStatus status) {
+            @RequestParam TaskStatus status,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
 
-        TaskResponse response = taskService.updateTaskStatus(id, status);
+        TaskResponse response = taskService.updateTaskStatus(id, status, currentUser.getId(), Role.valueOf(currentUser.getRole()));
         return ResponseEntity.ok(response);
     }
 

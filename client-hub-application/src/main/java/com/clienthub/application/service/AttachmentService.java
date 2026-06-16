@@ -57,6 +57,9 @@ public class AttachmentService {
             String extension = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")) : "";
             String generatedFileName = fileId.toString() + extension;
             Path destinationFile = uploadPath.resolve(generatedFileName).normalize().toAbsolutePath();
+            if (!destinationFile.getParent().equals(uploadPath.toAbsolutePath())) {
+                throw new SecurityException("Cannot store file outside current directory.");
+            }
 
             Files.copy(file.getInputStream(), destinationFile, StandardCopyOption.REPLACE_EXISTING);
 
@@ -67,5 +70,37 @@ public class AttachmentService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to store file " + originalFilename, e);
         }
+    }
+
+    /**
+     * Resolve and validate a filename for secure download.
+     * <p>Prevents path traversal by ensuring the resolved path
+     * stays within the configured upload directory.</p>
+     *
+     * @param filename the stored filename (UUID-based, from upload response)
+     * @return the absolute path to the file
+     * @throws IllegalArgumentException if the filename is invalid or the file doesn't exist
+     * @throws SecurityException if a path traversal is detected
+     */
+    public Path resolveDownloadPath(String filename) {
+        if (filename == null || filename.isBlank()) {
+            throw new IllegalArgumentException("Filename is required");
+        }
+        if (filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+            throw new SecurityException("Invalid filename");
+        }
+
+        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path filePath = uploadPath.resolve(filename).normalize();
+
+        // Ensure resolved path is still within upload directory (prevent traversal)
+        if (!filePath.startsWith(uploadPath)) {
+            throw new SecurityException("Cannot access file outside upload directory");
+        }
+        if (!Files.exists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filename);
+        }
+
+        return filePath;
     }
 }
