@@ -32,6 +32,7 @@ public class CommunicationService extends TenantAwareService {
     private final TaskRepository taskRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
+    private final UserService userService;
 
     public CommunicationService(CommunicationThreadRepository threadRepository,
                                 CommentRepository commentRepository,
@@ -40,7 +41,8 @@ public class CommunicationService extends TenantAwareService {
                                 ProjectMemberRepository projectMemberRepository,
                                 TaskRepository taskRepository,
                                 InvoiceRepository invoiceRepository,
-                                UserRepository userRepository) {
+                                UserRepository userRepository,
+                                UserService userService) {
         this.threadRepository = threadRepository;
         this.commentRepository = commentRepository;
         this.notificationRepository = notificationRepository;
@@ -49,6 +51,7 @@ public class CommunicationService extends TenantAwareService {
         this.taskRepository = taskRepository;
         this.invoiceRepository = invoiceRepository;
         this.userRepository = userRepository;
+        this.userService = userService;
     }
 
     @LogAudit(action = AuditAction.CREATE, entityType = "COMMENT", entityId = "#result.id")
@@ -226,6 +229,7 @@ public class CommunicationService extends TenantAwareService {
 
     private void sendNotification(User recipient, User sender, CommentTargetType type, String targetId, String tenantId) {
         if (recipient == null) return;
+        if (!userService.allowsNotification(recipient.getId(), tenantId, NotificationType.NEW_COMMENT)) return;
 
         Notification notification = new Notification();
         notification.setTenantId(tenantId);
