@@ -16,9 +16,9 @@
 
 # Build artifacts
 target/
-!target/*.jar
 *.class
 *.log
+app.log
 *.jar
 *.war
 
@@ -27,6 +27,7 @@ target/
 
 # Environment
 .env
+.env.*
 .env.local
 .env.*.local
 
