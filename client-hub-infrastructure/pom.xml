@@ -76,16 +76,6 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
-        <!-- Rate Limiting -->
-        <dependency>
-            <groupId>com.bucket4j</groupId>
-            <artifactId>bucket4j-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.bucket4j</groupId>
-            <artifactId>bucket4j-redis</artifactId>
-        </dependency>
-
         <!-- Flyway Database Migration -->
         <dependency>
             <groupId>org.flywaydb</groupId>
