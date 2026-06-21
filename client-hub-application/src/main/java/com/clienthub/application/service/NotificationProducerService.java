@@ -21,11 +21,14 @@ public class NotificationProducerService {
 
     private final NotificationRepository notificationRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final UserService userService;
 
     public NotificationProducerService(NotificationRepository notificationRepository,
-                                       ProjectMemberRepository projectMemberRepository) {
+                                       ProjectMemberRepository projectMemberRepository,
+                                       UserService userService) {
         this.notificationRepository = notificationRepository;
         this.projectMemberRepository = projectMemberRepository;
+        this.userService = userService;
     }
 
     public void notifyTaskCompleted(Task task) {
@@ -96,6 +99,9 @@ public class NotificationProducerService {
                                     String message,
                                     String tenantId) {
         if (recipient == null) {
+            return;
+        }
+        if (!userService.allowsNotification(recipient.getId(), tenantId, type)) {
             return;
         }
 

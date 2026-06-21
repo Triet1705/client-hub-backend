@@ -2,39 +2,25 @@ package com.clienthub.web.security;
 
 import com.clienthub.infrastructure.security.JwtTokenProvider;
 import com.clienthub.infrastructure.security.RateLimitFilter;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.distributed.BucketProxy;
-import io.github.bucket4j.distributed.proxy.ProxyManager;
-import io.github.bucket4j.distributed.proxy.RemoteBucketBuilder;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Map;
 import java.util.UUID;
-import java.util.function.Supplier;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class RateLimitFilterTest {
-
-    @Mock
-    private ProxyManager<byte[]> proxyManager;
-
-    @Mock
-    private RemoteBucketBuilder<byte[]> bucketBuilder;
-
-    @Mock
-    private BucketProxy bucket;
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
@@ -42,22 +28,15 @@ public class RateLimitFilterTest {
     @Mock
     private FilterChain filterChain;
 
-    @Mock
-    private org.springframework.beans.factory.ObjectProvider<ProxyManager<byte[]>> proxyManagerProvider;
-
     private RateLimitFilter rateLimitFilter;
 
     @BeforeEach
     void setUp() {
-        when(proxyManagerProvider.getIfAvailable()).thenReturn(proxyManager);
-        rateLimitFilter = new RateLimitFilter(proxyManagerProvider, jwtTokenProvider);
+        rateLimitFilter = new RateLimitFilter(jwtTokenProvider);
         ReflectionTestUtils.setField(rateLimitFilter, "loginLimit", 5);
         ReflectionTestUtils.setField(rateLimitFilter, "registerLimit", 3);
         ReflectionTestUtils.setField(rateLimitFilter, "aiLimit", 10);
         ReflectionTestUtils.setField(rateLimitFilter, "generalLimit", 60);
-
-        when(proxyManager.builder()).thenReturn(bucketBuilder);
-        when(bucketBuilder.build(any(byte[].class), any(Supplier.class))).thenReturn(bucket);
     }
 
     @Test
@@ -68,8 +47,6 @@ public class RateLimitFilterTest {
         request.setRemoteAddr("127.0.0.1");
 
         MockHttpServletResponse response = new MockHttpServletResponse();
-
-        when(bucket.tryConsume(1)).thenReturn(true);
 
         rateLimitFilter.doFilter(request, response, filterChain);
 
@@ -86,13 +63,16 @@ public class RateLimitFilterTest {
 
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(bucket.tryConsume(1)).thenReturn(false);
+        ReflectionTestUtils.setField(rateLimitFilter, "generalLimit", 1);
 
         rateLimitFilter.doFilter(request, response, filterChain);
 
-        verify(filterChain, never()).doFilter(request, response);
-        assertEquals(429, response.getStatus());
-        assertEquals("60", response.getHeader("Retry-After"));
+        MockHttpServletResponse blockedResponse = new MockHttpServletResponse();
+        rateLimitFilter.doFilter(request, blockedResponse, filterChain);
+
+        verify(filterChain, times(1)).doFilter(any(), any());
+        assertEquals(429, blockedResponse.getStatus());
+        assertEquals("60", blockedResponse.getHeader("Retry-After"));
     }
 
     @Test
@@ -104,10 +84,10 @@ public class RateLimitFilterTest {
         request1.setRemoteAddr("192.168.1.1");
         
         MockHttpServletResponse response1 = new MockHttpServletResponse();
-        when(bucket.tryConsume(1)).thenReturn(true);
         rateLimitFilter.doFilter(request1, response1, filterChain);
-        
-        verify(bucketBuilder).build(ArgumentMatchers.argThat(bytes -> new String(bytes).startsWith("login:192.168.1.1")), any(Supplier.class));
+
+        Map<String, ?> buckets = getBuckets();
+        assertTrue(buckets.containsKey("login:192.168.1.1"));
         
         // Test AI endpoint with JWT
         MockHttpServletRequest request2 = new MockHttpServletRequest();
@@ -120,10 +100,14 @@ public class RateLimitFilterTest {
         UUID userId = UUID.randomUUID();
         when(jwtTokenProvider.validateToken("valid-token")).thenReturn(true);
         when(jwtTokenProvider.extractUserId("valid-token")).thenReturn(userId);
-        when(bucket.tryConsume(1)).thenReturn(true);
-        
+
         rateLimitFilter.doFilter(request2, response2, filterChain);
-        
-        verify(bucketBuilder).build(ArgumentMatchers.argThat(bytes -> new String(bytes).startsWith("ai:" + userId)), any(Supplier.class));
+
+        assertTrue(buckets.containsKey("ai:" + userId));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, ?> getBuckets() {
+        return (Map<String, ?>) ReflectionTestUtils.getField(rateLimitFilter, "buckets");
     }
 }

@@ -1,9 +1,5 @@
 package com.clienthub.infrastructure.security;
 
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.BucketConfiguration;
-import io.github.bucket4j.distributed.proxy.ProxyManager;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,15 +12,16 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.function.Supplier;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private final ProxyManager<byte[]> proxyManager;
     private final JwtTokenProvider tokenProvider;
+    private final Map<String, FixedWindowCounter> buckets = new ConcurrentHashMap<>();
+    private final Duration windowDuration = Duration.ofMinutes(1);
 
     @Value("${rate-limit.login:5}")
     private int loginLimit;
@@ -38,8 +35,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Value("${rate-limit.general:60}")
     private int generalLimit;
 
-    public RateLimitFilter(org.springframework.beans.factory.ObjectProvider<ProxyManager<byte[]>> proxyManagerProvider, JwtTokenProvider tokenProvider) {
-        this.proxyManager = proxyManagerProvider.getIfAvailable();
+    public RateLimitFilter(JwtTokenProvider tokenProvider) {
         this.tokenProvider = tokenProvider;
     }
 
@@ -52,7 +48,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         String method = request.getMethod();
 
-        if (proxyManager != null && path.startsWith("/api/")) {
+        if (path.startsWith("/api/")) {
             String key;
             int limit;
             
@@ -73,9 +69,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 limit = generalLimit;
             }
 
-            Bucket bucket = proxyManager.builder().build(key.getBytes(StandardCharsets.UTF_8), getBucketConfiguration(limit));
+            FixedWindowCounter bucket = buckets.computeIfAbsent(key, ignored -> new FixedWindowCounter(windowDuration));
 
-            if (!bucket.tryConsume(1)) {
+            if (!bucket.tryConsume(limit)) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setHeader("Retry-After", "60");
                 response.getWriter().write("Too many requests");
@@ -114,12 +110,28 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private Supplier<BucketConfiguration> getBucketConfiguration(int limit) {
-        return () -> BucketConfiguration.builder()
-                .addLimit(Bandwidth.builder()
-                        .capacity(limit)
-                        .refillGreedy(limit, Duration.ofMinutes(1))
-                        .build())
-                .build();
+    private static final class FixedWindowCounter {
+        private final long windowMillis;
+        private long windowStartedAt;
+        private int consumed;
+
+        private FixedWindowCounter(Duration windowDuration) {
+            this.windowMillis = windowDuration.toMillis();
+            this.windowStartedAt = System.currentTimeMillis();
+        }
+
+        private synchronized boolean tryConsume(int limit) {
+            long now = System.currentTimeMillis();
+            if (now - windowStartedAt >= windowMillis) {
+                windowStartedAt = now;
+                consumed = 0;
+            }
+            if (consumed >= limit) {
+                return false;
+            }
+            consumed++;
+            return true;
+        }
     }
+
 }
