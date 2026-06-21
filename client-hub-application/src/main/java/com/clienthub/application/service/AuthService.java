@@ -1,6 +1,7 @@
 package com.clienthub.application.service;
 
 import com.clienthub.application.dto.JwtResponse;
+import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.RefreshToken;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.Role;
@@ -48,7 +49,8 @@ public class AuthService {
 
     @Transactional
     public User registerUser(String fullName, String email, String password, String role, String tenantId) {
-        if (userRepository.existsByEmail(email)) {
+        String resolvedTenantId = resolveTenantId(tenantId);
+        if (userRepository.existsByEmailAndTenantId(email, resolvedTenantId)) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
@@ -63,7 +65,7 @@ public class AuthService {
             throw new IllegalArgumentException("ADMIN accounts must be created by an existing administrator.");
         }
 
-        if (com.clienthub.common.context.TenantContext.SYSTEM_TENANT.equals(tenantId)) {
+        if (TenantContext.SYSTEM_TENANT.equals(resolvedTenantId)) {
             throw new IllegalArgumentException("Reserved tenant ID is not permitted.");
         }
 
@@ -72,7 +74,7 @@ public class AuthService {
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(resolvedRole);
-        user.setTenantId(tenantId != null && !tenantId.isBlank() ? tenantId : "default");
+        user.setTenantId(resolvedTenantId);
 
         return userRepository.save(user);
     }
@@ -101,7 +103,7 @@ public class AuthService {
     
     @Transactional
     public JwtResponse refreshToken(String requestToken, String ipAddress, String userAgent) {
-        return refreshTokenRepository.findByToken(requestToken)
+        return refreshTokenRepository.findByTokenForUpdate(requestToken)
                 .map(parentToken -> {
                     if (parentToken.getRevoked()) {
                         refreshTokenRepository.deleteByUser(parentToken.getUser());
@@ -140,13 +142,21 @@ public class AuthService {
                     "Refresh token not found in database."));
     }
 
-    public User getUserByEmail(String email) {
-        return userRepository.findByEmail(email)
+    public User getUserByEmail(String email, String tenantId) {
+        return userRepository.findByEmailCustom(email, resolveTenantId(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
     }
 
-    public boolean emailExists(String email) {
-        return userRepository.existsByEmail(email);
+    public boolean emailExists(String email, String tenantId) {
+        return userRepository.existsByEmailAndTenantId(email, resolveTenantId(tenantId));
+    }
+
+    private String resolveTenantId(String tenantId) {
+        if (tenantId != null && !tenantId.isBlank()) {
+            return tenantId;
+        }
+        String currentTenantId = TenantContext.getTenantId();
+        return currentTenantId != null && !currentTenantId.isBlank() ? currentTenantId : "default";
     }
 
 

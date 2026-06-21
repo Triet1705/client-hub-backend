@@ -37,6 +37,9 @@ public interface UserRepository extends JpaRepository<User, UUID>,
 
     boolean existsByEmail(String email);
 
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.email = :email AND u.tenantId = :tenantId")
+    boolean existsByEmailAndTenantId(@Param("email") String email, @Param("tenantId") String tenantId);
+
     @Query(value = "SELECT * FROM users", nativeQuery = true)
     List<User> findAllNative();
 

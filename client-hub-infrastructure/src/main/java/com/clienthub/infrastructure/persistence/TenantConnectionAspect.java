@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class TenantConnectionAspect {
 
     private static final Logger log = LoggerFactory.getLogger(TenantConnectionAspect.class);
+    private static final String SAFE_TENANT_PATTERN = "^[a-zA-Z0-9_-]+$";
 
     private final EntityManager entityManager;
 
@@ -26,12 +27,18 @@ public class TenantConnectionAspect {
     public void setTenantId() {
         String tenantId = TenantContext.getTenantId();
         if (tenantId != null && !tenantId.isEmpty()) {
+            if (!tenantId.matches(SAFE_TENANT_PATTERN)) {
+                throw new IllegalStateException("Invalid tenant ID in TenantContext");
+            }
             log.debug("Setting app.current_tenant to {}", tenantId);
-            entityManager.createNativeQuery("SET LOCAL app.current_tenant = '" + tenantId + "'").executeUpdate();
+            entityManager.createNativeQuery("SELECT set_config('app.current_tenant', :tenantId, true)")
+                    .setParameter("tenantId", tenantId)
+                    .getSingleResult();
         } else {
             // For requests without tenant (e.g. system tasks or public endpoints), clear it
             log.debug("Clearing app.current_tenant");
-            entityManager.createNativeQuery("SET LOCAL app.current_tenant = ''").executeUpdate();
+            entityManager.createNativeQuery("SELECT set_config('app.current_tenant', '', true)")
+                    .getSingleResult();
         }
     }
 }
