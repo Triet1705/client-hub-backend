@@ -3,17 +3,23 @@ package com.clienthub.web.config;
 import com.clienthub.common.context.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class TenantInterceptor implements HandlerInterceptor {
     private static final Logger log = LoggerFactory.getLogger(TenantInterceptor.class);
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String DEFAULT_TENANT = "default";
+
+    @Value("${app.tenant.require-header:false}")
+    private boolean requireTenantHeader;
 
     @Override
     public boolean preHandle(
@@ -34,6 +40,9 @@ public class TenantInterceptor implements HandlerInterceptor {
             String tenantId = extractTenantId(request);
             TenantContext.setTenantId(tenantId);
             log.debug("Tenant context set from header: {}", tenantId);
+        } catch (ResponseStatusException e) {
+            TenantContext.clear();
+            throw e;
         } catch (Exception e) {
             log.error("Error setting tenant context", e);
             TenantContext.setTenantId(DEFAULT_TENANT);
@@ -59,13 +68,18 @@ public class TenantInterceptor implements HandlerInterceptor {
         String tenantId = request.getHeader(TENANT_HEADER);
         
         if (tenantId == null || tenantId.isBlank()) {
-            // TODO: In production, consider rejecting requests without tenant ID
+            if (requireTenantHeader) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, TENANT_HEADER + " header is required");
+            }
             log.warn("No tenant ID in request header, using default");
             return DEFAULT_TENANT;
         }
         
         // Validate tenant ID format (alphanumeric, dash, underscore only)
         if (!tenantId.matches("^[a-zA-Z0-9_-]+$")) {
+            if (requireTenantHeader) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + TENANT_HEADER + " header");
+            }
             log.warn("Invalid tenant ID format: {}", tenantId);
             return DEFAULT_TENANT;
         }

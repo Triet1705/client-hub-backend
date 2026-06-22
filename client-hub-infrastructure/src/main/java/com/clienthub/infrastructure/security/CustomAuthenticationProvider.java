@@ -1,5 +1,6 @@
 package com.clienthub.infrastructure.security;
 
+import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.repository.UserRepository;
 import org.slf4j.Logger;
@@ -44,7 +45,7 @@ public class CustomAuthenticationProvider extends DaoAuthenticationProvider {
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
         String email = authentication.getName();
         
-        User user = userRepository.findByEmailIgnoringTenant(email)
+        User user = findUserForCurrentTenant(email)
                 .orElse(null);
         
         if (user != null) {
@@ -104,5 +105,13 @@ public class CustomAuthenticationProvider extends DaoAuthenticationProvider {
         }
         
         userRepository.save(user);
+    }
+
+    private java.util.Optional<User> findUserForCurrentTenant(String email) {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !tenantId.isBlank() && !TenantContext.SYSTEM_TENANT.equals(tenantId)) {
+            return userRepository.findByEmailCustom(email, tenantId);
+        }
+        return userRepository.findByEmailIgnoringTenant(email);
     }
 }

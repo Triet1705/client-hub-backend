@@ -1,5 +1,6 @@
 package com.clienthub.infrastructure.security;
 
+import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.repository.UserRepository;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -24,7 +25,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmailIgnoringTenant(email)
+        User user = findUserForCurrentTenant(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
         var authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
@@ -38,5 +39,13 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getTenantId(),
                 Collections.singletonList(authority)  
         );
+    }
+
+    private java.util.Optional<User> findUserForCurrentTenant(String email) {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId != null && !tenantId.isBlank() && !TenantContext.SYSTEM_TENANT.equals(tenantId)) {
+            return userRepository.findByEmailCustom(email, tenantId);
+        }
+        return userRepository.findByEmailIgnoringTenant(email);
     }
 }
