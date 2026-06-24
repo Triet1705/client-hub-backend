@@ -48,4 +48,26 @@ class TenantInterceptorTest {
         assertThrows(ResponseStatusException.class,
                 () -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()));
     }
+
+    @Test
+    void preHandleRejectsInvalidTenantHeaderInDevelopmentMode() {
+        ReflectionTestUtils.setField(interceptor, "requireTenantHeader", false);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Tenant-ID", "Bad_Tenant");
+
+        assertThrows(ResponseStatusException.class,
+                () -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()));
+    }
+
+    @Test
+    void preHandleAcceptsValidTenantSlug() {
+        ReflectionTestUtils.setField(interceptor, "requireTenantHeader", true);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-Tenant-ID", "agency-alpha");
+
+        boolean result = interceptor.preHandle(request, new MockHttpServletResponse(), new Object());
+
+        assertTrue(result);
+        assertEquals("agency-alpha", TenantContext.getTenantId());
+    }
 }

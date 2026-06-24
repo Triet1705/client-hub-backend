@@ -2,11 +2,14 @@ package com.clienthub.application.service;
 
 import com.clienthub.application.dto.JwtResponse;
 import com.clienthub.common.context.TenantContext;
+import com.clienthub.application.exception.TenantAlreadyExistsException;
 import com.clienthub.domain.entity.RefreshToken;
+import com.clienthub.domain.entity.Tenant;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.application.exception.TokenRefreshException;
 import com.clienthub.domain.repository.RefreshTokenRepository;
+import com.clienthub.domain.repository.TenantRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
@@ -19,15 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
 
     private static final String TOKEN_TYPE_BEARER = "Bearer";
     private static final int REFRESH_TOKEN_BYTE_LENGTH = 64;
+    private static final Pattern TENANT_SLUG_PATTERN = Pattern.compile("^[a-z0-9-]{3,64}$");
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
+    private final TenantRepository tenantRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
 
@@ -38,21 +44,20 @@ public class AuthService {
 
     public AuthService(RefreshTokenRepository refreshTokenRepository,
                        UserRepository userRepository,
+                       TenantRepository tenantRepository,
                        JwtTokenProvider jwtTokenProvider,
                        PasswordEncoder passwordEncoder
     ) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.userRepository = userRepository;
+        this.tenantRepository = tenantRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
     public User registerUser(String fullName, String email, String password, String role, String tenantId) {
-        String resolvedTenantId = resolveTenantId(tenantId);
-        if (userRepository.existsByEmailAndTenantId(email, resolvedTenantId)) {
-            throw new IllegalArgumentException("Email is already registered");
-        }
+        String resolvedTenantId = resolveRequiredTenantId(tenantId);
 
         Role resolvedRole;
         try {
@@ -60,7 +65,7 @@ public class AuthService {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid role: " + role + ". Must be CLIENT or FREELANCER.");
         }
-        // Prevent privilege escalation — ADMIN accounts cannot be self-registered
+        // Prevent privilege escalation: ADMIN accounts cannot be self-registered.
         if (resolvedRole == Role.ADMIN) {
             throw new IllegalArgumentException("ADMIN accounts must be created by an existing administrator.");
         }
@@ -68,6 +73,12 @@ public class AuthService {
         if (TenantContext.SYSTEM_TENANT.equals(resolvedTenantId)) {
             throw new IllegalArgumentException("Reserved tenant ID is not permitted.");
         }
+
+        if (tenantRepository.existsById(resolvedTenantId)) {
+            throw new TenantAlreadyExistsException(resolvedTenantId);
+        }
+
+        tenantRepository.save(new Tenant(resolvedTenantId, resolvedTenantId));
 
         User user = new User();
         user.setFullName(fullName);
@@ -143,20 +154,32 @@ public class AuthService {
     }
 
     public User getUserByEmail(String email, String tenantId) {
-        return userRepository.findByEmailCustom(email, resolveTenantId(tenantId))
+        return userRepository.findByEmailCustom(email, resolveRequiredTenantId(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
     }
 
     public boolean emailExists(String email, String tenantId) {
-        return userRepository.existsByEmailAndTenantId(email, resolveTenantId(tenantId));
+        return userRepository.existsByEmailAndTenantId(email, resolveRequiredTenantId(tenantId));
     }
 
-    private String resolveTenantId(String tenantId) {
+    private String resolveRequiredTenantId(String tenantId) {
+        String resolvedTenantId;
         if (tenantId != null && !tenantId.isBlank()) {
-            return tenantId;
+            resolvedTenantId = tenantId.trim();
+        } else {
+            String currentTenantId = TenantContext.getTenantId();
+            resolvedTenantId = currentTenantId != null ? currentTenantId.trim() : "";
         }
-        String currentTenantId = TenantContext.getTenantId();
-        return currentTenantId != null && !currentTenantId.isBlank() ? currentTenantId : "default";
+
+        if (resolvedTenantId.isBlank()) {
+            throw new IllegalArgumentException("Tenant ID is required.");
+        }
+        if (!TenantContext.SYSTEM_TENANT.equals(resolvedTenantId)
+                && !TENANT_SLUG_PATTERN.matcher(resolvedTenantId).matches()) {
+            throw new IllegalArgumentException("Invalid tenant ID.");
+        }
+
+        return resolvedTenantId;
     }
 
 

@@ -46,6 +46,6 @@ public class CustomUserDetailsService implements UserDetailsService {
         if (tenantId != null && !tenantId.isBlank() && !TenantContext.SYSTEM_TENANT.equals(tenantId)) {
             return userRepository.findByEmailCustom(email, tenantId);
         }
-        return userRepository.findByEmailIgnoringTenant(email);
+        return java.util.Optional.empty();
     }
 }

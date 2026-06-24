@@ -30,6 +30,9 @@ public class ProductionReadinessConfig implements ApplicationRunner {
     @Value("${cors.allowed-origins:}")
     private String allowedOrigins;
 
+    @Value("${app.tenant.require-header:false}")
+    private boolean tenantHeaderRequired;
+
     @Value("${blockchain.enabled:false}")
     private boolean blockchainEnabled;
 
@@ -56,6 +59,7 @@ public class ProductionReadinessConfig implements ApplicationRunner {
         require(!allowedOrigins.contains("localhost") && !allowedOrigins.contains("127.0.0.1"),
                 failures,
                 "cors.allowed-origins must not contain localhost origins in prod");
+        require(tenantHeaderRequired, failures, "app.tenant.require-header must be true in prod");
 
         if (blockchainEnabled) {
             require(!blockchainNodeUrl.isBlank(), failures, "blockchain.node_url is required when blockchain is enabled");
