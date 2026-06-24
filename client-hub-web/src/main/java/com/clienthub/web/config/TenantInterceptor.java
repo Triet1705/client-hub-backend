@@ -17,6 +17,7 @@ public class TenantInterceptor implements HandlerInterceptor {
     private static final Logger log = LoggerFactory.getLogger(TenantInterceptor.class);
     private static final String TENANT_HEADER = "X-Tenant-ID";
     private static final String DEFAULT_TENANT = "default";
+    private static final String TENANT_PATTERN = "^[a-z0-9-]{3,64}$";
 
     @Value("${app.tenant.require-header:false}")
     private boolean requireTenantHeader;
@@ -75,15 +76,13 @@ public class TenantInterceptor implements HandlerInterceptor {
             return DEFAULT_TENANT;
         }
         
-        // Validate tenant ID format (alphanumeric, dash, underscore only)
-        if (!tenantId.matches("^[a-zA-Z0-9_-]+$")) {
-            if (requireTenantHeader) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + TENANT_HEADER + " header");
-            }
+        String trimmedTenantId = tenantId.trim();
+
+        if (!trimmedTenantId.matches(TENANT_PATTERN)) {
             log.warn("Invalid tenant ID format: {}", tenantId);
-            return DEFAULT_TENANT;
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + TENANT_HEADER + " header");
         }
         
-        return tenantId;
+        return trimmedTenantId;
     }
 }

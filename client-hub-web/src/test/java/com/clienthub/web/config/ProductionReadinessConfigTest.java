@@ -35,6 +35,15 @@ class ProductionReadinessConfigTest {
         assertThrows(IllegalStateException.class, () -> config.run(null));
     }
 
+    @Test
+    void runRequiresTenantHeaderInProduction() {
+        ProductionReadinessConfig config = new ProductionReadinessConfig();
+        setRequiredFields(config);
+        ReflectionTestUtils.setField(config, "tenantHeaderRequired", false);
+
+        assertThrows(IllegalStateException.class, () -> config.run(null));
+    }
+
     private static void setRequiredFields(ProductionReadinessConfig config) {
         ReflectionTestUtils.setField(config, "jwtSecret", "production-secret-value-at-least-32-chars");
         ReflectionTestUtils.setField(config, "datasourcePassword", "db-secret");
@@ -42,6 +51,7 @@ class ProductionReadinessConfigTest {
         ReflectionTestUtils.setField(config, "minioSecretKey", "minio-secret");
         ReflectionTestUtils.setField(config, "redisPassword", "redis-secret");
         ReflectionTestUtils.setField(config, "allowedOrigins", "https://clienthub.example.com");
+        ReflectionTestUtils.setField(config, "tenantHeaderRequired", true);
         ReflectionTestUtils.setField(config, "blockchainEnabled", false);
         ReflectionTestUtils.setField(config, "blockchainNodeUrl", "");
         ReflectionTestUtils.setField(config, "blockchainAdminPrivateKey", "");

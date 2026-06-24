@@ -2,6 +2,7 @@ package com.clienthub.web.controller;
 
 import com.clienthub.web.dto.auth.*;
 import com.clienthub.web.dto.common.ErrorResponse;
+import com.clienthub.application.exception.TenantAlreadyExistsException;
 import com.clienthub.domain.entity.RefreshToken;
 import com.clienthub.domain.entity.User;
 import com.clienthub.application.dto.JwtResponse;
@@ -9,6 +10,9 @@ import com.clienthub.application.exception.TokenRefreshException;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
 import com.clienthub.application.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -34,6 +38,7 @@ import java.time.Duration;
  */
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "Authentication", description = "Tenant-aware authentication and workspace registration")
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
@@ -76,6 +81,10 @@ public class AuthController {
      * @return JwtResponse with access token, refresh token, and user info
      */
     @PostMapping("/login")
+    @Operation(
+            summary = "Login with workspace tenant",
+            description = "Authenticates an existing user. The X-Tenant-ID header identifies the workspace."
+    )
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
                                               HttpServletRequest request) {
         try {
@@ -160,22 +169,16 @@ public class AuthController {
      * @return RegisterResponse with success message and user info
      */
     @PostMapping("/register")
+    @Operation(
+            summary = "Create a new workspace and first user",
+            description = "Public registration creates a new workspace for an unused X-Tenant-ID. Existing workspaces require invite/admin flows."
+    )
     public ResponseEntity<?> registerUser(
             @Valid @RequestBody RegisterRequest registerRequest,
-            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Tenant-ID", defaultValue = "default") String tenantId
+            @Parameter(description = "New workspace tenant slug")
+            @org.springframework.web.bind.annotation.RequestHeader(value = "X-Tenant-ID", required = false) String tenantId
     ) {
         try {
-            if (authService.emailExists(registerRequest.getEmail(), tenantId)) {
-                log.warn("Registration attempt with existing email: {}", registerRequest.getEmail());
-                return ResponseEntity
-                        .status(HttpStatus.CONFLICT)
-                        .body(new ErrorResponse(
-                                "Email Already Exists",
-                                "An account with this email already exists. Please login or use a different email.",
-                                HttpStatus.CONFLICT.value()
-                        ));
-            }
-
             User newUser = authService.registerUser(
                     registerRequest.getFullName(),
                     registerRequest.getEmail(),
@@ -191,10 +194,19 @@ public class AuthController {
                     .body(new RegisterResponse(
                             "User registered successfully!",
                             newUser.getId(),
-                            newUser.getEmail(),
-                            newUser.getFullName()
-                    ));
+                    newUser.getEmail(),
+                    newUser.getFullName()
+            ));
 
+        } catch (TenantAlreadyExistsException e) {
+            log.warn("Registration attempt for existing tenant: {}", tenantId);
+            return ResponseEntity
+                    .status(HttpStatus.CONFLICT)
+                    .body(new ErrorResponse(
+                            "Workspace Already Exists",
+                            "A workspace with this Tenant ID already exists. Ask an administrator for an invitation.",
+                            HttpStatus.CONFLICT.value()
+                    ));
         } catch (IllegalArgumentException e) {
             log.error("Registration validation error: {}", e.getMessage());
             return ResponseEntity
