@@ -43,6 +43,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByIdAndTenantId(Long id, String tenantId);
     java.util.List<Invoice> findByTenantIdAndStatus(String tenantId, InvoiceStatus status);
+    long countByStatusNotIn(java.util.List<InvoiceStatus> statuses);
     
     long countByTenantId(String tenantId);
     long countByTenantIdAndStatus(String tenantId, InvoiceStatus status);
