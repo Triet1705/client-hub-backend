@@ -3,6 +3,7 @@ package com.clienthub.web.controller;
 import com.clienthub.application.dto.admin.*;
 import com.clienthub.application.dto.analytics.AdminDashboardResponse;
 import com.clienthub.application.service.AdminService;
+import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.web.dto.admin.ForceStatusRequest;
 import com.clienthub.web.dto.admin.UserRoleRequest;
@@ -17,12 +18,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -94,20 +98,69 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getPlatformAnalytics());
     }
 
+    @GetMapping("/control-center")
+    @Operation(summary = "Get admin control center overview",
+               description = "Admin-only operational aggregate for platform metrics, health, alerts, events, audit feed, and read-only flags")
+    public ResponseEntity<AdminControlCenterResponse> getControlCenter() {
+        return ResponseEntity.ok(adminService.getControlCenter());
+    }
+
     @GetMapping("/health")
     @Operation(summary = "Get system health",
-               description = "Checks DB, Redis, and AI Engine connectivity")
+               description = "Checks DB, Redis, AI Engine, blockchain readiness, JVM memory, and uptime")
     public ResponseEntity<AdminHealthResponse> getSystemHealth() {
         return ResponseEntity.ok(adminService.getSystemHealth());
     }
 
     @GetMapping("/audit-logs")
     @Operation(summary = "Get recent system activity",
-               description = "Paginated list of audit logs across all tenants")
+               description = "Paginated security and compliance audit logs across all tenants")
     public ResponseEntity<Page<AdminAuditLogResponse>> listRecentActivity(
+            @Parameter(description = "Audit action filter") @RequestParam(required = false) AuditAction action,
+            @Parameter(description = "Entity type filter") @RequestParam(required = false) String entityType,
+            @Parameter(description = "Tenant ID filter") @RequestParam(required = false) String tenantId,
+            @Parameter(description = "Anchored status filter") @RequestParam(required = false) Boolean anchored,
+            @Parameter(description = "Created at lower bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @Parameter(description = "Created at upper bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") @Min(0) int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(adminService.listRecentActivity(buildPageable(page, size, "createdAt", "desc")));
+        return ResponseEntity.ok(adminService.listRecentActivity(
+                action,
+                entityType,
+                tenantId,
+                anchored,
+                from,
+                to,
+                buildPageable(page, size, "createdAt", "desc")));
+    }
+
+    @GetMapping("/events")
+    @Operation(summary = "Get normalized admin events",
+               description = "Admin-only domain event timeline derived from audit logs for operational visibility")
+    public ResponseEntity<Page<AdminEventItem>> listEvents(
+            @Parameter(description = "Category: AUTH, USER, PROJECT, TASK, INVOICE, AUDIT, SYSTEM, WEB3") @RequestParam(required = false) String category,
+            @Parameter(description = "Severity: INFO, SUCCESS, WARNING, CRITICAL") @RequestParam(required = false) String severity,
+            @Parameter(description = "Entity type filter") @RequestParam(required = false) String entityType,
+            @Parameter(description = "Tenant ID filter") @RequestParam(required = false) String tenantId,
+            @Parameter(description = "Created at lower bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @Parameter(description = "Created at upper bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") @Min(0) int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(adminService.listEvents(
+                category,
+                severity,
+                entityType,
+                tenantId,
+                from,
+                to,
+                buildPageable(page, size, "createdAt", "desc")));
+    }
+
+    @GetMapping("/flags")
+    @Operation(summary = "Get read-only platform capability flags",
+               description = "Admin-only runtime/configuration visibility for operational capabilities; flags cannot be mutated here")
+    public ResponseEntity<List<AdminFeatureFlag>> listFlags() {
+        return ResponseEntity.ok(adminService.getFeatureFlags());
     }
 
     // ─── Projects ─────────────────────────────────────────────────────────────
