@@ -104,4 +104,82 @@ public class AdminControllerTest {
                 .andDo(print())
                 .andExpect(status().isUnauthorized());
     }
+
+    // ========== /api/admin/control-center Tests ==========
+
+    @Test
+    @DisplayName("Control Center - Admin role should return overview aggregate")
+    @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+    void testGetControlCenter_WithAdminRole_ShouldReturnAggregate() throws Exception {
+        mockMvc.perform(get("/api/admin/control-center"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.systemStatus").isString())
+                .andExpect(jsonPath("$.health.overallStatus").isString())
+                .andExpect(jsonPath("$.alerts").isArray())
+                .andExpect(jsonPath("$.recentEvents").isArray())
+                .andExpect(jsonPath("$.recentAuditLogs").isArray())
+                .andExpect(jsonPath("$.flags").isArray());
+    }
+
+    @Test
+    @DisplayName("Control Center - Client role should return 403 Forbidden")
+    @WithMockUser(username = "client@test.com", roles = "CLIENT")
+    void testGetControlCenter_WithClientRole_ShouldReturnForbidden() throws Exception {
+        mockMvc.perform(get("/api/admin/control-center"))
+                .andDo(print())
+                .andExpect(status().isForbidden());
+    }
+
+    // ========== /api/admin/events Tests ==========
+
+    @Test
+    @DisplayName("Events - Admin role should return paginated normalized events")
+    @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+    void testGetEvents_WithAdminRole_ShouldReturnPage() throws Exception {
+        mockMvc.perform(get("/api/admin/events")
+                        .param("category", "AUTH")
+                        .param("severity", "INFO")
+                        .param("size", "5"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.pageable").exists());
+    }
+
+    @Test
+    @DisplayName("Events - Freelancer role should return 403 Forbidden")
+    @WithMockUser(username = "freelancer@test.com", roles = "FREELANCER")
+    void testGetEvents_WithFreelancerRole_ShouldReturnForbidden() throws Exception {
+        mockMvc.perform(get("/api/admin/events"))
+                .andDo(print())
+                .andExpect(status().isForbidden());
+    }
+
+    // ========== /api/admin/flags and audit filters Tests ==========
+
+    @Test
+    @DisplayName("Flags - Admin role should return read-only capability flags")
+    @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+    void testGetFlags_WithAdminRole_ShouldReturnFlags() throws Exception {
+        mockMvc.perform(get("/api/admin/flags"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[?(@.key == 'tenant-header-required')]").exists())
+                .andExpect(jsonPath("$[?(@.key == 'admin-impersonation')]").exists());
+    }
+
+    @Test
+    @DisplayName("Audit Logs - Admin role can filter by action and anchored state")
+    @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+    void testGetAuditLogs_WithFilters_ShouldReturnPage() throws Exception {
+        mockMvc.perform(get("/api/admin/audit-logs")
+                        .param("action", "LOGIN_FAILED")
+                        .param("anchored", "false")
+                        .param("tenantId", "default"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+    }
 }

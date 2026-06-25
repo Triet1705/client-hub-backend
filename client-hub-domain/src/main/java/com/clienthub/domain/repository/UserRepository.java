@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID>, 
@@ -42,6 +43,8 @@ public interface UserRepository extends JpaRepository<User, UUID>,
 
     @Query(value = "SELECT * FROM users", nativeQuery = true)
     List<User> findAllNative();
+
+    long countByLastLoginAtAfter(Instant lastLoginAt);
 
         @Query("""
                 SELECT u FROM User u
