@@ -19,13 +19,25 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Invoice> findByTenantId(String tenantId);
     List<Invoice> findByProjectIdAndTenantId(UUID projectId, String tenantId);
     
-    @Query("SELECT i FROM Invoice i WHERE i.paymentMethod = :paymentMethod AND i.status NOT IN :statuses")
+    @Query("""
+            SELECT DISTINCT i FROM Invoice i
+            JOIN FETCH i.client
+            JOIN FETCH i.freelancer
+            WHERE i.paymentMethod = :paymentMethod
+              AND i.status NOT IN :statuses
+            """)
     List<Invoice> findSystemCryptoInvoicesByPaymentMethodAndStatusNotIn(
             @Param("paymentMethod") PaymentMethod paymentMethod,
             @Param("statuses") List<InvoiceStatus> statuses
     );
 
-    @Query("SELECT i FROM Invoice i WHERE i.id = :id AND i.paymentMethod = com.clienthub.domain.enums.PaymentMethod.CRYPTO_ESCROW")
+    @Query("""
+            SELECT i FROM Invoice i
+            JOIN FETCH i.client
+            JOIN FETCH i.freelancer
+            WHERE i.id = :id
+              AND i.paymentMethod = com.clienthub.domain.enums.PaymentMethod.CRYPTO_ESCROW
+            """)
     Optional<Invoice> findSystemCryptoEscrowById(@Param("id") Long id);
 
     @Query("""

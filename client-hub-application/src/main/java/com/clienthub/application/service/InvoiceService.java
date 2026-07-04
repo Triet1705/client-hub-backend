@@ -22,12 +22,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class InvoiceService extends TenantAwareService {
+    private static final Set<InvoiceStatus> CHAIN_DERIVED_CRYPTO_STATUSES = Set.of(
+            InvoiceStatus.DEPOSIT_DETECTED,
+            InvoiceStatus.LOCKED,
+            InvoiceStatus.PAID,
+            InvoiceStatus.REFUNDED
+    );
 
     private final InvoiceRepository invoiceRepository;
     private final ProjectRepository projectRepository;
@@ -188,6 +195,11 @@ public class InvoiceService extends TenantAwareService {
         
         if (!isClient && !isAdmin) {
             throw new ResourceNotFoundException("You do not have permission to update this invoice");
+        }
+
+        if (invoice.getPaymentMethod() == PaymentMethod.CRYPTO_ESCROW
+                && CHAIN_DERIVED_CRYPTO_STATUSES.contains(newStatus)) {
+            throw new IllegalStateException("Crypto escrow invoice status is managed by blockchain events");
         }
 
         if (!invoice.getStatus().canTransitionTo(newStatus)) {
