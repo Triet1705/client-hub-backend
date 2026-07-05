@@ -18,6 +18,12 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     Optional<Invoice> findByIdAndTenantId(Long id, String tenantId);
     List<Invoice> findByTenantId(String tenantId);
     List<Invoice> findByProjectIdAndTenantId(UUID projectId, String tenantId);
+
+    @Query("SELECT i.id FROM Invoice i WHERE i.project.id = :projectId AND i.tenantId = :tenantId")
+    List<Long> findIdsByProjectIdAndTenantId(
+            @Param("projectId") UUID projectId,
+            @Param("tenantId") String tenantId
+    );
     
     @Query("""
             SELECT DISTINCT i FROM Invoice i

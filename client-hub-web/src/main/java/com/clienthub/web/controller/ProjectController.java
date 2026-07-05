@@ -2,16 +2,21 @@ package com.clienthub.web.controller;
 
 import com.clienthub.domain.enums.ProjectStatus;
 import com.clienthub.domain.enums.Role;
+import com.clienthub.application.dto.project.ProjectActivityResponse;
+import com.clienthub.application.dto.project.ProjectFileResponse;
 import com.clienthub.application.dto.project.ProjectMemberRequest;
 import com.clienthub.application.dto.project.ProjectMemberResponse;
 import com.clienthub.application.dto.project.ProjectFreelancerSearchResponse;
 import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
+import com.clienthub.application.service.ProjectPortalService;
 import com.clienthub.application.service.ProjectService;
 import com.clienthub.application.service.AnalyticsService;
 import com.clienthub.application.dto.analytics.ProjectProgressResponse;
 import com.clienthub.common.context.TenantContext;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,14 +33,19 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/projects")
+@Tag(name = "Projects", description = "Project management and client portal endpoints")
 public class ProjectController {
 
     private final ProjectService projectService;
     private final AnalyticsService analyticsService;
+    private final ProjectPortalService projectPortalService;
 
-    public ProjectController(ProjectService projectService, AnalyticsService analyticsService) {
+    public ProjectController(ProjectService projectService,
+                             AnalyticsService analyticsService,
+                             ProjectPortalService projectPortalService) {
         this.projectService = projectService;
         this.analyticsService = analyticsService;
+        this.projectPortalService = projectPortalService;
     }
 
     @PostMapping
@@ -68,8 +78,30 @@ public class ProjectController {
 
     @GetMapping("/{id}/progress")
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @Operation(summary = "Get project progress", description = "Returns backend-computed task completion progress for a project.")
     public ResponseEntity<ProjectProgressResponse> getProjectProgress(@PathVariable UUID id) {
         return ResponseEntity.ok(analyticsService.getProjectProgress(id, TenantContext.getTenantId()));
+    }
+
+    @GetMapping("/{id}/files")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @Operation(summary = "Get project portal files", description = "Aggregates attachments from project, task, and invoice comments for the project portal.")
+    public ResponseEntity<List<ProjectFileResponse>> getProjectFiles(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectPortalService.getProjectFiles(id, currentUser.getId(), callerRole));
+    }
+
+    @GetMapping("/{id}/activity")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @Operation(summary = "Get project portal activity", description = "Returns a client-safe timeline for project, task, invoice, and message activity.")
+    public ResponseEntity<Page<ProjectActivityResponse>> getProjectActivity(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectPortalService.getProjectActivity(id, currentUser.getId(), callerRole, pageable));
     }
 
     @PutMapping("/{id}")
