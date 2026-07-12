@@ -14,8 +14,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -111,6 +111,19 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(
                 "Not Found",
                 ex.getMessage(),
+                HttpStatus.NOT_FOUND.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex) {
+        log.warn("No route or static resource found: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Not Found",
+                "The requested endpoint was not found",
                 HttpStatus.NOT_FOUND.value()
         );
 

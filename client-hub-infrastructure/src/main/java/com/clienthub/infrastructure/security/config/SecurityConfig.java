@@ -80,7 +80,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
 
                         // Restrict Swagger to admins (Task 3.2)
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").hasAuthority("ADMIN_ALL")
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").hasRole(Role.ADMIN.name())
 
                         .anyRequest().authenticated()
                 )
