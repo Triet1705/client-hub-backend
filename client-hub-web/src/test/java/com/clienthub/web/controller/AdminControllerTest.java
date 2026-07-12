@@ -11,6 +11,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -181,5 +182,28 @@ public class AdminControllerTest {
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray());
+    }
+
+    @Test
+    @DisplayName("Audit anchors - Admin can list batches and run an empty local cycle")
+    @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+    void testAuditAnchors_WithAdminRole_ShouldExposeAdminApi() throws Exception {
+        mockMvc.perform(get("/api/admin/audit-anchor-batches"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        mockMvc.perform(post("/api/admin/audit-anchor-batches/run"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("Audit anchors - Client cannot access proof operations")
+    @WithMockUser(username = "client@test.com", roles = "CLIENT")
+    void testAuditAnchors_WithClientRole_ShouldReturnForbidden() throws Exception {
+        mockMvc.perform(get("/api/admin/audit-anchor-batches"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/admin/audit-logs/1/verify"))
+                .andExpect(status().isForbidden());
     }
 }

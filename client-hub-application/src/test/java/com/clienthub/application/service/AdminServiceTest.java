@@ -6,6 +6,7 @@ import com.clienthub.application.dto.admin.AdminControlCenterResponse;
 import com.clienthub.domain.entity.AuditLog;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.repository.AuditLogRepository;
+import com.clienthub.domain.repository.AuditAnchorMemberRepository;
 import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
@@ -54,6 +55,9 @@ class AdminServiceTest {
     private AuditLogRepository auditLogRepository;
 
     @Mock
+    private AuditAnchorMemberRepository auditAnchorMemberRepository;
+
+    @Mock
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
@@ -74,6 +78,7 @@ class AdminServiceTest {
                 projectRepository,
                 invoiceRepository,
                 auditLogRepository,
+                auditAnchorMemberRepository,
                 jwtTokenProvider,
                 jdbcTemplate,
                 redisTemplate,
@@ -155,7 +160,7 @@ class AdminServiceTest {
         when(invoiceRepository.countByStatusNotIn(anyList())).thenReturn(2L);
         when(auditLogRepository.countByActionAndCreatedAtAfter(eq(AuditAction.LOGIN_FAILED), any(Instant.class)))
                 .thenReturn(11L);
-        when(auditLogRepository.countByIsAnchoredFalse()).thenReturn(5L);
+        when(auditLogRepository.countWithoutConfirmedAnchor(anyList(), eq(com.clienthub.domain.enums.AuditAnchorBatchStatus.CONFIRMED))).thenReturn(5L);
         when(auditLogRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
 
         AdminControlCenterResponse response = adminService.getControlCenter();
