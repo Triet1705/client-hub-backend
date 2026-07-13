@@ -16,13 +16,16 @@ import com.clienthub.application.dto.admin.JvmVitals;
 import com.clienthub.application.dto.admin.OperationalAlert;
 import com.clienthub.application.dto.analytics.AdminDashboardResponse;
 import com.clienthub.domain.entity.AuditLog;
+import com.clienthub.domain.entity.AuditAnchorMember;
 import com.clienthub.domain.entity.Invoice;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.AuditAction;
+import com.clienthub.domain.enums.AuditAnchorBatchStatus;
 import com.clienthub.domain.enums.InvoiceStatus;
 import com.clienthub.domain.enums.ProjectStatus;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.domain.repository.AuditLogRepository;
+import com.clienthub.domain.repository.AuditAnchorMemberRepository;
 import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
@@ -78,6 +81,7 @@ public class AdminService {
     private final ProjectRepository projectRepository;
     private final InvoiceRepository invoiceRepository;
     private final AuditLogRepository auditLogRepository;
+    private final AuditAnchorMemberRepository auditAnchorMemberRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final JdbcTemplate jdbcTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -98,6 +102,9 @@ public class AdminService {
     @Value("${blockchain.contract_address:}")
     private String blockchainContractAddress;
 
+    @Value("${audit.anchor.contract_address:}")
+    private String auditAnchorContractAddress;
+
     @Value("${app.tenant.require-header:false}")
     private boolean tenantHeaderRequired;
 
@@ -114,6 +121,7 @@ public class AdminService {
                         ProjectRepository projectRepository,
                         InvoiceRepository invoiceRepository,
                         AuditLogRepository auditLogRepository,
+                        AuditAnchorMemberRepository auditAnchorMemberRepository,
                         JwtTokenProvider jwtTokenProvider,
                         JdbcTemplate jdbcTemplate,
                         RedisTemplate<String, Object> redisTemplate,
@@ -122,6 +130,7 @@ public class AdminService {
         this.projectRepository = projectRepository;
         this.invoiceRepository = invoiceRepository;
         this.auditLogRepository = auditLogRepository;
+        this.auditAnchorMemberRepository = auditAnchorMemberRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
@@ -271,7 +280,7 @@ public class AdminService {
         return auditLogRepository.findAll(
                         buildAuditLogSpec(action, entityType, tenantId, anchored, from, to),
                         pageable)
-                .map(AdminAuditLogResponse::from);
+                .map(log -> AdminAuditLogResponse.from(log, isConfirmedAnchor(log.getId())));
     }
 
     public Page<AdminEventItem> listEvents(
@@ -340,10 +349,10 @@ public class AdminService {
                 new AdminFeatureFlag(
                         "audit-anchoring",
                         "Audit anchoring readiness",
-                        blockchainConfigured,
-                        blockchainConfigured ? "READY" : "NOT_READY",
+                        blockchainConfigured && isConfigured(auditAnchorContractAddress),
+                        blockchainConfigured && isConfigured(auditAnchorContractAddress) ? "READY" : "NOT_READY",
                         "Requires blockchain workflow config before audit roots can be anchored.",
-                        "blockchain.contract_address"));
+                        "audit.anchor.contract_address"));
     }
 
     public AdminHealthResponse getSystemHealth() {
@@ -384,7 +393,12 @@ public class AdminService {
                 predicates.add(cb.equal(root.get("tenantId"), tenantId.trim()));
             }
             if (anchored != null) {
-                predicates.add(cb.equal(root.get("isAnchored"), anchored));
+                var subquery = query.subquery(Long.class);
+                var member = subquery.from(AuditAnchorMember.class);
+                subquery.select(member.get("id")).where(
+                        cb.equal(member.get("auditLogId"), root.get("id")),
+                        cb.equal(member.get("batch").get("status"), AuditAnchorBatchStatus.CONFIRMED));
+                predicates.add(anchored ? cb.exists(subquery) : cb.not(cb.exists(subquery)));
             }
             if (from != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
@@ -557,7 +571,9 @@ public class AdminService {
                     now));
         }
 
-        long unanchoredLogs = auditLogRepository.countByIsAnchoredFalse();
+        long unanchoredLogs = auditLogRepository.countWithoutConfirmedAnchor(
+                List.of(AuditAction.ANCHOR_SUCCESS, AuditAction.ANCHOR_FAILED),
+                AuditAnchorBatchStatus.CONFIRMED);
         if (unanchoredLogs > 0) {
             alerts.add(new OperationalAlert(
                     "unanchored-audit-logs",
@@ -579,6 +595,12 @@ public class AdminService {
         }
 
         return alerts;
+    }
+
+    private boolean isConfirmedAnchor(Long auditLogId) {
+        return auditAnchorMemberRepository.findByAuditLogId(auditLogId)
+                .map(member -> member.getBatch().getStatus() == AuditAnchorBatchStatus.CONFIRMED)
+                .orElse(false);
     }
 
     private void addHealthAlert(List<OperationalAlert> alerts, String id, String label, ComponentHealth health, Instant now) {

@@ -24,6 +24,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import com.clienthub.infrastructure.security.CustomUserDetails;
+import com.clienthub.web3.service.AuditAnchorBatchResponse;
+import com.clienthub.web3.service.AuditAnchorService;
+import com.clienthub.web3.service.AuditProofResponse;
 
 import java.time.Instant;
 import java.util.List;
@@ -36,9 +39,11 @@ import java.util.UUID;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AuditAnchorService auditAnchorService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, AuditAnchorService auditAnchorService) {
         this.adminService = adminService;
+        this.auditAnchorService = auditAnchorService;
     }
 
     // ─── Helper: build a safe Pageable from explicit params ───────────────────
@@ -132,6 +137,36 @@ public class AdminController {
                 from,
                 to,
                 buildPageable(page, size, "createdAt", "desc")));
+    }
+
+    @GetMapping("/audit-anchor-batches")
+    @Operation(summary = "List audit anchor batches",
+               description = "Returns blockchain audit-proof batches and their submission or confirmation state")
+    public ResponseEntity<Page<AuditAnchorBatchResponse>> listAuditAnchorBatches(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(auditAnchorService.listBatches(PageRequest.of(page, size)));
+    }
+
+    @PostMapping("/audit-anchor-batches/run")
+    @Operation(summary = "Run audit anchoring now",
+               description = "Creates and submits a batch from currently unanchored audit records")
+    public ResponseEntity<AuditAnchorBatchResponse> runAuditAnchoring() {
+        return auditAnchorService.run(true)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/audit-logs/{id}/proof")
+    @Operation(summary = "Get an audit log Merkle proof")
+    public ResponseEntity<AuditProofResponse> getAuditProof(@PathVariable long id) {
+        return ResponseEntity.ok(auditAnchorService.getProof(id));
+    }
+
+    @PostMapping("/audit-logs/{id}/verify")
+    @Operation(summary = "Verify an audit log proof against the configured blockchain")
+    public ResponseEntity<AuditProofResponse> verifyAuditProof(@PathVariable long id) {
+        return ResponseEntity.ok(auditAnchorService.verify(id));
     }
 
     @GetMapping("/events")

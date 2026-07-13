@@ -20,6 +20,10 @@
             <groupId>com.clienthub</groupId>
             <artifactId>client-hub-domain</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.clienthub</groupId>
+            <artifactId>client-hub-application</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

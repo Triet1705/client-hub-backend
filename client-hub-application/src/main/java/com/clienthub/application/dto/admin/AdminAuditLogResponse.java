@@ -22,6 +22,10 @@ public record AdminAuditLogResponse(
         boolean isAnchored
 ) {
     public static AdminAuditLogResponse from(AuditLog log) {
+        return from(log, log.isAnchored());
+    }
+
+    public static AdminAuditLogResponse from(AuditLog log, boolean anchored) {
         return new AdminAuditLogResponse(
                 log.getId(),
                 log.getAction() != null ? log.getAction().name() : "UNKNOWN",
@@ -36,7 +40,7 @@ public record AdminAuditLogResponse(
                 log.getOldValue(),
                 log.getNewValue(),
                 log.getDataHash(),
-                log.isAnchored()
+                anchored
         );
     }
 }
