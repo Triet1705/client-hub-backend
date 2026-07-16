@@ -2,6 +2,7 @@ package com.clienthub.application.service;
 
 import com.clienthub.application.dto.project.ProjectActivityResponse;
 import com.clienthub.application.dto.project.ProjectFileResponse;
+import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.AuditLog;
@@ -29,6 +30,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -43,19 +46,22 @@ public class ProjectPortalService extends TenantAwareService {
     private final InvoiceRepository invoiceRepository;
     private final CommentRepository commentRepository;
     private final AuditLogRepository auditLogRepository;
+    private final AuditProofReader auditProofReader;
 
     public ProjectPortalService(ProjectRepository projectRepository,
                                 ProjectMemberRepository projectMemberRepository,
                                 TaskRepository taskRepository,
                                 InvoiceRepository invoiceRepository,
                                 CommentRepository commentRepository,
-                                AuditLogRepository auditLogRepository) {
+                                AuditLogRepository auditLogRepository,
+                                AuditProofReader auditProofReader) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.taskRepository = taskRepository;
         this.invoiceRepository = invoiceRepository;
         this.commentRepository = commentRepository;
         this.auditLogRepository = auditLogRepository;
+        this.auditProofReader = auditProofReader;
     }
 
     public List<ProjectFileResponse> getProjectFiles(UUID projectId, UUID currentUserId, Role callerRole) {
@@ -108,14 +114,48 @@ public class ProjectPortalService extends TenantAwareService {
                 .map(String::valueOf)
                 .toList();
 
-        return auditLogRepository.findProjectActivity(
+        Page<AuditLog> logs = auditLogRepository.findProjectActivity(
                 tenantId,
                 projectId.toString(),
                 nonEmpty(targetIndex.taskIds()),
                 nonEmpty(targetIndex.invoiceIds()),
                 nonEmpty(commentIds),
                 pageable
-        ).map(this::toActivityResponse);
+        );
+        Map<Long, UserAuditProofResponse> proofs = auditProofReader.getUserProofs(
+                logs.getContent().stream().map(AuditLog::getId).toList());
+        return logs.map(log -> toActivityResponse(log, log.getId() != null ? proofs.get(log.getId()) : null));
+    }
+
+    public UserAuditProofResponse getActivityProof(UUID projectId, long auditLogId, UUID currentUserId,
+                                                    Role callerRole, boolean verify) {
+        String tenantId = getCurrentTenantId();
+        validateProjectAccess(projectId, currentUserId, callerRole, tenantId);
+        AuditLog log = auditLogRepository.findById(auditLogId)
+                .filter(value -> tenantId.equals(value.getTenantId()))
+                .orElseThrow(() -> new ResourceNotFoundException("AuditLog", "id", auditLogId));
+
+        TargetIndex targets = loadTargetIndex(projectId, tenantId);
+        Set<String> commentIds = findProjectScopedComments(projectId, tenantId, targets).stream()
+                .map(Comment::getId)
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        if (!belongsToProject(log, projectId, targets, commentIds)) {
+            throw new ResourceNotFoundException("AuditLog", "id", auditLogId);
+        }
+
+        return verify ? auditProofReader.verifyUserProof(auditLogId) : auditProofReader.getUserProof(auditLogId);
+    }
+
+    private boolean belongsToProject(AuditLog log, UUID projectId, TargetIndex targets, Set<String> commentIds) {
+        return switch (normalize(log.getEntityType())) {
+            case "PROJECT" -> projectId.toString().equals(log.getEntityId());
+            case "TASK" -> targets.taskIds().contains(log.getEntityId());
+            case "INVOICE" -> targets.invoiceIds().contains(log.getEntityId());
+            case "COMMENT" -> commentIds.contains(log.getEntityId());
+            default -> false;
+        };
     }
 
     private Project validateProjectAccess(UUID projectId, UUID currentUserId, Role callerRole, String tenantId) {
@@ -168,7 +208,8 @@ public class ProjectPortalService extends TenantAwareService {
         return values == null || values.isEmpty() ? EMPTY_TARGET_SENTINEL : values;
     }
 
-    private ProjectActivityResponse toActivityResponse(AuditLog log) {
+    private ProjectActivityResponse toActivityResponse(AuditLog log, UserAuditProofResponse proof) {
+        UserAuditProofResponse effectiveProof = proof != null ? proof : UserAuditProofResponse.notAvailable();
         return new ProjectActivityResponse(
                 log.getId(),
                 log.getAction() != null ? log.getAction().name() : "UPDATE",
@@ -176,7 +217,10 @@ public class ProjectPortalService extends TenantAwareService {
                 log.getEntityType(),
                 log.getEntityId(),
                 resolveActorName(log),
-                log.getCreatedAt()
+                log.getCreatedAt(),
+                effectiveProof.verificationStatus(),
+                effectiveProof.proofAvailable(),
+                effectiveProof.anchoredAt()
         );
     }
 

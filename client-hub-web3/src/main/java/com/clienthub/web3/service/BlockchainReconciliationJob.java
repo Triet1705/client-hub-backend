@@ -90,9 +90,10 @@ public class BlockchainReconciliationJob {
             return;
         }
 
+        InvoiceStatus previousStatus = invoice.getStatus();
         if (applyValidatedSnapshot(invoice, snapshot.status())) {
             invoiceRepository.save(invoice);
-            eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, invoice));
+            eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, invoice, previousStatus));
         }
     }
 

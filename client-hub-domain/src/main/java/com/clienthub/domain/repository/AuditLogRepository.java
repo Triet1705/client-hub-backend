@@ -27,6 +27,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long>, JpaSp
             String tenantId
     );
 
+    Optional<AuditLog> findFirstByEntityTypeAndEntityIdAndTenantIdOrderByCreatedAtDescIdDesc(
+            String entityType,
+            String entityId,
+            String tenantId
+    );
+
     @Query("""
             SELECT a FROM AuditLog a
             WHERE a.tenantId = :tenantId

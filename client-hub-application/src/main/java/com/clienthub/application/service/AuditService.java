@@ -39,25 +39,25 @@ public class AuditService extends TenantAwareService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(AuditAction action, String entityType, String entityId,
                     Object oldEntity, Object newEntity, String ipAddress) {
+        String tenantId;
         try {
-            String tenantId;
-            try {
-                tenantId = getCurrentTenantId();
-            } catch (SecurityException e) {
-                tenantId = "SYSTEM";
-            }
+            tenantId = getCurrentTenantId();
+        } catch (SecurityException e) {
+            tenantId = "SYSTEM";
+        }
+        Actor actor = currentActor();
+        persist(tenantId, actor, action, entityType, entityId, oldEntity, newEntity, ipAddress);
+    }
 
-            UUID userId = null;
-            String userEmail = "SYSTEM";
-            String userRole = "SYSTEM";
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logForTenant(String tenantId, AuditAction action, String entityType, String entityId,
+                             Object oldEntity, Object newEntity, String ipAddress) {
+        persist(tenantId, currentActor(), action, entityType, entityId, oldEntity, newEntity, ipAddress);
+    }
 
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.getPrincipal() instanceof CustomUserDetails userDetails) {
-                userId = userDetails.getId();
-                userEmail = userDetails.getEmail();
-                userRole = userDetails.getRole() != null ? userDetails.getRole() : "UNKNOWN";
-            }
-
+    private void persist(String tenantId, Actor actor, AuditAction action, String entityType, String entityId,
+                         Object oldEntity, Object newEntity, String ipAddress) {
+        try {
             String oldValJson = oldEntity != null ? serialize(oldEntity) : null;
             String newValJson = newEntity != null ? serialize(newEntity) : null;
 
@@ -65,9 +65,9 @@ public class AuditService extends TenantAwareService {
 
             AuditLog log = new AuditLog(
                     tenantId,
-                    userId,
-                    userEmail,
-                    userRole,
+                    actor.userId(),
+                    actor.email(),
+                    actor.role(),
                     action,
                     entityType,
                     entityId,
@@ -84,6 +84,15 @@ public class AuditService extends TenantAwareService {
         } catch (Exception e) {
             logger.error("CRITICAL: Failed to save audit log for {} {}", entityType, entityId, e);
         }
+    }
+
+    private Actor currentActor() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof CustomUserDetails userDetails) {
+            return new Actor(userDetails.getId(), userDetails.getEmail(),
+                    userDetails.getRole() != null ? userDetails.getRole() : "UNKNOWN");
+        }
+        return new Actor(null, "SYSTEM", "SYSTEM");
     }
 
     private String serialize(Object object) {
@@ -105,5 +114,8 @@ public class AuditService extends TenantAwareService {
             logger.error("Hashing failed", e);
             return "HASH_ERROR";
         }
+    }
+
+    private record Actor(UUID userId, String email, String role) {
     }
 }

@@ -21,6 +21,7 @@ import com.clienthub.domain.entity.Invoice;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.enums.AuditAnchorBatchStatus;
+import com.clienthub.domain.enums.AuditRecordAnchorStatus;
 import com.clienthub.domain.enums.InvoiceStatus;
 import com.clienthub.domain.enums.ProjectStatus;
 import com.clienthub.domain.enums.Role;
@@ -266,7 +267,7 @@ public class AdminService {
     }
 
     public Page<AdminAuditLogResponse> listRecentActivity(Pageable pageable) {
-        return listRecentActivity(null, null, null, null, null, null, pageable);
+        return listRecentActivity(null, null, null, null, null, null, null, pageable);
     }
 
     public Page<AdminAuditLogResponse> listRecentActivity(
@@ -274,11 +275,12 @@ public class AdminService {
             String entityType,
             String tenantId,
             Boolean anchored,
+            AuditRecordAnchorStatus anchorStatus,
             Instant from,
             Instant to,
             Pageable pageable) {
         return auditLogRepository.findAll(
-                        buildAuditLogSpec(action, entityType, tenantId, anchored, from, to),
+                        buildAuditLogSpec(action, entityType, tenantId, anchored, anchorStatus, from, to),
                         pageable)
                 .map(log -> AdminAuditLogResponse.from(log, isConfirmedAnchor(log.getId())));
     }
@@ -379,6 +381,7 @@ public class AdminService {
             String entityType,
             String tenantId,
             Boolean anchored,
+            AuditRecordAnchorStatus anchorStatus,
             Instant from,
             Instant to) {
         return (root, query, cb) -> {
@@ -392,7 +395,26 @@ public class AdminService {
             if (isConfigured(tenantId)) {
                 predicates.add(cb.equal(root.get("tenantId"), tenantId.trim()));
             }
-            if (anchored != null) {
+            if (anchorStatus != null) {
+                var subquery = query.subquery(Long.class);
+                var member = subquery.from(AuditAnchorMember.class);
+                List<jakarta.persistence.criteria.Predicate> memberPredicates = new ArrayList<>();
+                memberPredicates.add(cb.equal(member.get("auditLogId"), root.get("id")));
+                if (anchorStatus == AuditRecordAnchorStatus.PENDING) {
+                    memberPredicates.add(member.get("batch").get("status").in(
+                            AuditAnchorBatchStatus.BUILDING,
+                            AuditAnchorBatchStatus.READY,
+                            AuditAnchorBatchStatus.SUBMITTED));
+                } else if (anchorStatus == AuditRecordAnchorStatus.VERIFIED) {
+                    memberPredicates.add(cb.equal(member.get("batch").get("status"), AuditAnchorBatchStatus.CONFIRMED));
+                } else if (anchorStatus == AuditRecordAnchorStatus.FAILED) {
+                    memberPredicates.add(cb.equal(member.get("batch").get("status"), AuditAnchorBatchStatus.FAILED));
+                }
+                subquery.select(member.get("id")).where(memberPredicates.toArray(Predicate[]::new));
+                predicates.add(anchorStatus == AuditRecordAnchorStatus.WAITING
+                        ? cb.not(cb.exists(subquery))
+                        : cb.exists(subquery));
+            } else if (anchored != null) {
                 var subquery = query.subquery(Long.class);
                 var member = subquery.from(AuditAnchorMember.class);
                 subquery.select(member.get("id")).where(
