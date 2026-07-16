@@ -1,6 +1,8 @@
 package com.clienthub.web3.service;
 
 import com.clienthub.application.service.AuditService;
+import com.clienthub.application.service.AuditProofReader;
+import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.domain.entity.*;
 import com.clienthub.domain.enums.*;
@@ -20,7 +22,7 @@ import java.time.*;
 import java.util.*;
 
 @Service
-public class AuditAnchorService {
+public class AuditAnchorService implements AuditProofReader {
     private static final Logger log = LoggerFactory.getLogger(AuditAnchorService.class);
     private static final List<AuditAction> EXCLUDED_ACTIONS =
             List.of(AuditAction.ANCHOR_SUCCESS, AuditAction.ANCHOR_FAILED);
@@ -87,6 +89,27 @@ public class AuditAnchorService {
         return batchRepository.findAllByOrderByCreatedAtDesc(pageable).map(AuditAnchorBatchResponse::from);
     }
 
+    public Page<AuditAnchorBatchResponse> listBatches(AuditAnchorBatchStatus status, Pageable pageable) {
+        if (status == null) return listBatches(pageable);
+        return batchRepository.findByStatusOrderByCreatedAtDesc(status, pageable).map(AuditAnchorBatchResponse::from);
+    }
+
+    public AuditAnchorSummaryResponse summary() {
+        long waiting = auditLogRepository.countUnassignedForAnchoring(EXCLUDED_ACTIONS);
+        long pending = batchRepository.countByStatusIn(List.of(
+                AuditAnchorBatchStatus.BUILDING,
+                AuditAnchorBatchStatus.READY,
+                AuditAnchorBatchStatus.SUBMITTED));
+        long confirmed = batchRepository.countByStatus(AuditAnchorBatchStatus.CONFIRMED);
+        long failed = batchRepository.countByStatus(AuditAnchorBatchStatus.FAILED);
+        Instant latestConfirmedAt = batchRepository
+                .findFirstByStatusOrderByConfirmedAtDesc(AuditAnchorBatchStatus.CONFIRMED)
+                .map(AuditAnchorBatch::getConfirmedAt)
+                .orElse(null);
+        String serviceStatus = !enabled ? "DISABLED" : blockchainService.isReady() ? "READY" : "UNAVAILABLE";
+        return new AuditAnchorSummaryResponse(waiting, pending, confirmed, failed, latestConfirmedAt, serviceStatus);
+    }
+
     public AuditProofResponse getProof(long auditLogId) {
         AuditLog logEntry = auditLogRepository.findById(auditLogId)
                 .orElseThrow(() -> new ResourceNotFoundException("AuditLog", "id", auditLogId));
@@ -120,6 +143,55 @@ public class AuditAnchorService {
         } catch (AuditAnchorBlockchainService.BlockchainUnavailableException e) {
             return response(logEntry, member, AuditVerificationStatus.CHAIN_UNAVAILABLE);
         }
+    }
+
+    @Override
+    public UserAuditProofResponse getUserProof(long auditLogId) {
+        AuditProofResponse proof = getProof(auditLogId);
+        Instant anchoredAt = memberRepository.findByAuditLogId(auditLogId)
+                .map(AuditAnchorMember::getBatch)
+                .map(AuditAnchorBatch::getConfirmedAt)
+                .orElse(null);
+        return toUserProof(proof, anchoredAt);
+    }
+
+    @Override
+    public UserAuditProofResponse verifyUserProof(long auditLogId) {
+        AuditProofResponse proof = verify(auditLogId);
+        Instant anchoredAt = memberRepository.findByAuditLogId(auditLogId)
+                .map(AuditAnchorMember::getBatch)
+                .map(AuditAnchorBatch::getConfirmedAt)
+                .orElse(null);
+        return toUserProof(proof, anchoredAt);
+    }
+
+    @Override
+    public Map<Long, UserAuditProofResponse> getUserProofs(Collection<Long> auditLogIds) {
+        if (auditLogIds == null || auditLogIds.isEmpty()) return Map.of();
+        Map<Long, AuditLog> logs = auditLogRepository.findAllById(auditLogIds).stream()
+                .collect(java.util.stream.Collectors.toMap(AuditLog::getId, value -> value));
+        Map<Long, AuditAnchorMember> members = memberRepository.findByAuditLogIdIn(auditLogIds).stream()
+                .collect(java.util.stream.Collectors.toMap(AuditAnchorMember::getAuditLogId, value -> value));
+        Map<Long, UserAuditProofResponse> result = new HashMap<>();
+        for (Long auditLogId : auditLogIds) {
+            AuditLog logEntry = logs.get(auditLogId);
+            AuditAnchorMember member = members.get(auditLogId);
+            if (logEntry == null || member == null) {
+                result.put(auditLogId, UserAuditProofResponse.notAvailable(auditLogId));
+                continue;
+            }
+            AuditProofResponse proof = response(logEntry, member, localStatus(logEntry, member));
+            result.put(auditLogId, toUserProof(proof, member.getBatch().getConfirmedAt()));
+        }
+        return result;
+    }
+
+    private UserAuditProofResponse toUserProof(AuditProofResponse proof, Instant anchoredAt) {
+        return new UserAuditProofResponse(
+                proof.auditLogId(), proof.batchId() != null, proof.verificationStatus(), proof.batchStatus(),
+                anchoredAt, proof.confirmations(), proof.chainId(), proof.transactionHash(), proof.contractAddress(),
+                proof.hashVersion(), proof.leafHash(), proof.leafIndex(), proof.proof(), proof.merkleRoot(),
+                proof.confirmedBlock());
     }
 
     private UUID createBatch(boolean force) {

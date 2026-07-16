@@ -3,6 +3,7 @@ package com.clienthub.web.controller;
 import com.clienthub.domain.enums.InvoiceStatus;
 import com.clienthub.application.dto.invoice.InvoiceRequest;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
+import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.application.service.InvoiceService;
 import jakarta.validation.Valid;
@@ -79,5 +80,21 @@ public class InvoiceController {
                 "status", response.getStatus(),
                 "escrowStatus", response.getEscrowStatus() != null ? response.getEscrowStatus() : "NOT_STARTED"
         ));
+    }
+
+    @GetMapping("/{id}/audit-proof")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<UserAuditProofResponse> getInvoiceAuditProof(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(invoiceService.getAuditProof(id, currentUser.getId()));
+    }
+
+    @PostMapping("/{id}/audit-proof/verify")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    public ResponseEntity<UserAuditProofResponse> verifyInvoiceAuditProof(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(invoiceService.verifyAuditProof(id, currentUser.getId()));
     }
 }

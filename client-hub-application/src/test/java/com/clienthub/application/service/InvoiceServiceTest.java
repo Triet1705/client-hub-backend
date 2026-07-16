@@ -11,6 +11,9 @@ import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectMemberRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
+import com.clienthub.domain.repository.AuditLogRepository;
+import org.springframework.context.ApplicationEventPublisher;
+import org.junit.jupiter.api.Test;
 import java.math.BigInteger;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,6 +59,15 @@ class InvoiceServiceTest {
     @Mock
     private NotificationProducerService notificationProducerService;
 
+    @Mock
+    private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private AuditProofReader auditProofReader;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private InvoiceService invoiceService;
 
@@ -82,6 +95,20 @@ class InvoiceServiceTest {
 
         assertEquals("Crypto escrow invoice status is managed by blockchain events", exception.getMessage());
         verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void getAuditProof_WhenHistoricalInvoiceHasNoAuditRecord_ReturnsUnavailable() {
+        Invoice invoice = createCryptoInvoice();
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID)).thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID)).thenReturn(Optional.of(invoice.getClient()));
+        when(auditLogRepository.findFirstByEntityTypeAndEntityIdAndTenantIdOrderByCreatedAtDescIdDesc(
+                "INVOICE", String.valueOf(INVOICE_ID), TENANT_ID)).thenReturn(Optional.empty());
+
+        var proof = invoiceService.getAuditProof(INVOICE_ID, CLIENT_ID);
+
+        assertFalse(proof.proofAvailable());
+        assertEquals(com.clienthub.domain.enums.AuditVerificationStatus.NOT_ANCHORED, proof.verificationStatus());
     }
 
     private Invoice createCryptoInvoice() {

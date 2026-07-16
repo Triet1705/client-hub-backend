@@ -44,6 +44,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectPortalServiceTest {
@@ -73,6 +74,9 @@ class ProjectPortalServiceTest {
 
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private AuditProofReader auditProofReader;
 
     @InjectMocks
     private ProjectPortalService projectPortalService;
@@ -176,6 +180,7 @@ class ProjectPortalServiceTest {
                 eq(List.of("11")),
                 eq(PageRequest.of(0, 20))
         )).thenReturn(new PageImpl<>(List.of(auditLog)));
+        when(auditProofReader.getUserProofs(any())).thenReturn(java.util.Map.of());
 
         Page<ProjectActivityResponse> activity = projectPortalService.getProjectActivity(
                 PROJECT_ID,
@@ -190,6 +195,34 @@ class ProjectPortalServiceTest {
         assertEquals("TASK", item.getEntityType());
         assertEquals("freelancer@demo.com", item.getActorName());
         assertTrue(activity.getContent().stream().noneMatch(response -> "127.0.0.1".equals(response.getActorName())));
+    }
+
+    @Test
+    void getActivityProof_RejectsAuditRecordOutsideProjectScope() {
+        Project project = createProject(OWNER_ID);
+        AuditLog unrelated = new AuditLog(TENANT_ID, OWNER_ID, "client@demo.com", "CLIENT",
+                AuditAction.UPDATE, "TASK", UUID.randomUUID().toString(), null, "{}", null, "hash");
+        setAuditId(unrelated, 99L);
+
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(Optional.of(project));
+        when(taskRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(List.of(TASK_ID));
+        when(invoiceRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(List.of(INVOICE_ID));
+        when(commentRepository.findProjectScopedComments(any(), any(), any(), any())).thenReturn(List.of());
+        when(auditLogRepository.findById(99L)).thenReturn(Optional.of(unrelated));
+
+        assertThrows(com.clienthub.application.exception.ResourceNotFoundException.class,
+                () -> projectPortalService.getActivityProof(PROJECT_ID, 99L, OWNER_ID, Role.CLIENT, false));
+        verify(auditProofReader, never()).getUserProof(99L);
+    }
+
+    private void setAuditId(AuditLog auditLog, Long id) {
+        try {
+            var field = AuditLog.class.getDeclaredField("id");
+            field.setAccessible(true);
+            field.set(auditLog, id);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private Project createProject(UUID ownerId) {

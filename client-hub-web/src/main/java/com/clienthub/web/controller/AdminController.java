@@ -4,6 +4,8 @@ import com.clienthub.application.dto.admin.*;
 import com.clienthub.application.dto.analytics.AdminDashboardResponse;
 import com.clienthub.application.service.AdminService;
 import com.clienthub.domain.enums.AuditAction;
+import com.clienthub.domain.enums.AuditAnchorBatchStatus;
+import com.clienthub.domain.enums.AuditRecordAnchorStatus;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.web.dto.admin.ForceStatusRequest;
 import com.clienthub.web.dto.admin.UserRoleRequest;
@@ -27,6 +29,7 @@ import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.web3.service.AuditAnchorBatchResponse;
 import com.clienthub.web3.service.AuditAnchorService;
 import com.clienthub.web3.service.AuditProofResponse;
+import com.clienthub.web3.service.AuditAnchorSummaryResponse;
 
 import java.time.Instant;
 import java.util.List;
@@ -125,6 +128,8 @@ public class AdminController {
             @Parameter(description = "Entity type filter") @RequestParam(required = false) String entityType,
             @Parameter(description = "Tenant ID filter") @RequestParam(required = false) String tenantId,
             @Parameter(description = "Anchored status filter") @RequestParam(required = false) Boolean anchored,
+            @Parameter(description = "Anchor workflow state: WAITING, PENDING, VERIFIED, FAILED")
+            @RequestParam(required = false) AuditRecordAnchorStatus anchorStatus,
             @Parameter(description = "Created at lower bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @Parameter(description = "Created at upper bound") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -134,6 +139,7 @@ public class AdminController {
                 entityType,
                 tenantId,
                 anchored,
+                anchorStatus,
                 from,
                 to,
                 buildPageable(page, size, "createdAt", "desc")));
@@ -143,9 +149,16 @@ public class AdminController {
     @Operation(summary = "List audit anchor batches",
                description = "Returns blockchain audit-proof batches and their submission or confirmation state")
     public ResponseEntity<Page<AuditAnchorBatchResponse>> listAuditAnchorBatches(
+            @RequestParam(required = false) AuditAnchorBatchStatus status,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(auditAnchorService.listBatches(PageRequest.of(page, size)));
+        return ResponseEntity.ok(auditAnchorService.listBatches(status, PageRequest.of(page, size)));
+    }
+
+    @GetMapping("/audit-anchor-summary")
+    @Operation(summary = "Get audit anchoring operational summary")
+    public ResponseEntity<AuditAnchorSummaryResponse> getAuditAnchorSummary() {
+        return ResponseEntity.ok(auditAnchorService.summary());
     }
 
     @PostMapping("/audit-anchor-batches/run")

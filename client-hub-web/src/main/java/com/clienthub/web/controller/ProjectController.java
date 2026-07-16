@@ -9,6 +9,7 @@ import com.clienthub.application.dto.project.ProjectMemberResponse;
 import com.clienthub.application.dto.project.ProjectFreelancerSearchResponse;
 import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
+import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.application.service.ProjectPortalService;
 import com.clienthub.application.service.ProjectService;
@@ -102,6 +103,30 @@ public class ProjectController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         Role callerRole = Role.valueOf(currentUser.getRole());
         return ResponseEntity.ok(projectPortalService.getProjectActivity(id, currentUser.getId(), callerRole, pageable));
+    }
+
+    @GetMapping("/{id}/activity/{auditLogId}/proof")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @Operation(summary = "Get a project activity audit proof")
+    public ResponseEntity<UserAuditProofResponse> getProjectActivityProof(
+            @PathVariable UUID id,
+            @PathVariable long auditLogId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectPortalService.getActivityProof(
+                id, auditLogId, currentUser.getId(), callerRole, false));
+    }
+
+    @PostMapping("/{id}/activity/{auditLogId}/verify")
+    @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
+    @Operation(summary = "Verify a project activity audit proof")
+    public ResponseEntity<UserAuditProofResponse> verifyProjectActivityProof(
+            @PathVariable UUID id,
+            @PathVariable long auditLogId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectPortalService.getActivityProof(
+                id, auditLogId, currentUser.getId(), callerRole, true));
     }
 
     @PutMapping("/{id}")

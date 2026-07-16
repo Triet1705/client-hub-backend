@@ -109,9 +109,10 @@ public class BlockchainListener {
             return;
         }
 
+        InvoiceStatus previousStatus = invoice.getStatus();
         if (applyValidatedEvent(invoice, expectedStatus, logEvent.getTransactionHash(), logEvent.getBlockNumber())) {
             invoiceRepository.save(invoice);
-            eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, invoice));
+            eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, invoice, previousStatus));
         }
     }
 

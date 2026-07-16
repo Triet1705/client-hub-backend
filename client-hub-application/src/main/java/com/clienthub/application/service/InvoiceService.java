@@ -10,9 +10,12 @@ import com.clienthub.domain.enums.PaymentMethod;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.application.dto.invoice.InvoiceRequest;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
+import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.mapper.InvoiceMapper;
 import com.clienthub.domain.repository.InvoiceRepository;
+import com.clienthub.domain.repository.AuditLogRepository;
+import com.clienthub.domain.event.InvoiceStatusChangedEvent;
 import com.clienthub.domain.repository.ProjectMemberRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
@@ -20,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Set;
@@ -42,6 +46,9 @@ public class InvoiceService extends TenantAwareService {
     private final UserRepository userRepository;
     private final InvoiceMapper invoiceMapper;
     private final NotificationProducerService notificationProducerService;
+    private final AuditLogRepository auditLogRepository;
+    private final AuditProofReader auditProofReader;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${blockchain.enabled:false}")
     private boolean blockchainEnabled;
@@ -51,13 +58,19 @@ public class InvoiceService extends TenantAwareService {
                           ProjectMemberRepository projectMemberRepository,
                           UserRepository userRepository,
                           InvoiceMapper invoiceMapper,
-                          NotificationProducerService notificationProducerService) {
+                          NotificationProducerService notificationProducerService,
+                          AuditLogRepository auditLogRepository,
+                          AuditProofReader auditProofReader,
+                          ApplicationEventPublisher eventPublisher) {
         this.invoiceRepository = invoiceRepository;
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.invoiceMapper = invoiceMapper;
         this.notificationProducerService = notificationProducerService;
+        this.auditLogRepository = auditLogRepository;
+        this.auditProofReader = auditProofReader;
+        this.eventPublisher = eventPublisher;
     }
 
     public InvoiceResponse createInvoice(InvoiceRequest request, UUID currentUserId) {
@@ -96,6 +109,7 @@ public class InvoiceService extends TenantAwareService {
         invoice.setTenantId(tenantId);
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
+        eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, savedInvoice, null));
         return invoiceMapper.toResponse(savedInvoice);
     }
 
@@ -144,25 +158,7 @@ public class InvoiceService extends TenantAwareService {
 
     @Transactional(readOnly = true)
     public InvoiceResponse getInvoiceByIdWithOwnershipCheck(Long id, UUID currentUserId) {
-        String tenantId = getCurrentTenantId();
-        Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
-
-        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        
-        if (currentUser.getRole() == Role.ADMIN) {
-            return invoiceMapper.toResponse(invoice);
-        }
-
-        UUID clientId = invoice.getClient().getId();
-        UUID freelancerId = invoice.getFreelancer().getId();
-        
-        if (!currentUserId.equals(clientId) && !currentUserId.equals(freelancerId)) {
-            throw new ResourceNotFoundException("Invoice not found or access denied");
-        }
-
-        return invoiceMapper.toResponse(invoice);
+        return invoiceMapper.toResponse(findAuthorizedInvoice(id, currentUserId));
     }
 
     @Transactional(readOnly = true)
@@ -215,12 +211,51 @@ public class InvoiceService extends TenantAwareService {
         }
 
         Invoice updated = invoiceRepository.save(invoice);
+        eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, updated, oldStatus));
 
         if (oldStatus != InvoiceStatus.PAID && newStatus == InvoiceStatus.PAID) {
             notificationProducerService.notifyInvoicePaid(updated);
         }
 
         return invoiceMapper.toResponse(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public UserAuditProofResponse getAuditProof(Long id, UUID currentUserId) {
+        Invoice invoice = findAuthorizedInvoice(id, currentUserId);
+        return latestInvoiceAuditId(invoice)
+                .map(auditProofReader::getUserProof)
+                .orElseGet(UserAuditProofResponse::notAvailable);
+    }
+
+    @Transactional(readOnly = true)
+    public UserAuditProofResponse verifyAuditProof(Long id, UUID currentUserId) {
+        Invoice invoice = findAuthorizedInvoice(id, currentUserId);
+        return latestInvoiceAuditId(invoice)
+                .map(auditProofReader::verifyUserProof)
+                .orElseGet(UserAuditProofResponse::notAvailable);
+    }
+
+    private java.util.Optional<Long> latestInvoiceAuditId(Invoice invoice) {
+        return auditLogRepository.findFirstByEntityTypeAndEntityIdAndTenantIdOrderByCreatedAtDescIdDesc(
+                        "INVOICE", String.valueOf(invoice.getId()), invoice.getTenantId())
+                .map(com.clienthub.domain.entity.AuditLog::getId);
+    }
+
+    private Invoice findAuthorizedInvoice(Long id, UUID currentUserId) {
+        String tenantId = getCurrentTenantId();
+        Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (currentUser.getRole() != Role.ADMIN
+                && !currentUserId.equals(invoice.getClient().getId())
+                && !currentUserId.equals(invoice.getFreelancer().getId())) {
+            throw new ResourceNotFoundException("Invoice not found or access denied");
+        }
+        return invoice;
     }
 
     @Transactional(readOnly = true)
