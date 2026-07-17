@@ -133,11 +133,23 @@ public class ProjectService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public ProjectResponse getProjectById(UUID projectId) {
+    public ProjectResponse getProjectById(UUID projectId, UUID currentUserId, Role callerRole) {
         String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        boolean isAdmin = callerRole == Role.ADMIN;
+        boolean isOwningClient = callerRole == Role.CLIENT
+                && project.getOwner() != null
+                && project.getOwner().getId().equals(currentUserId);
+        boolean isMemberFreelancer = callerRole == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                        projectId, currentUserId, tenantId);
+
+        if (!isAdmin && !isOwningClient && !isMemberFreelancer) {
+            throw new AccessDeniedException("You are not allowed to view this project");
+        }
 
         return projectMapper.toResponse(project);
     }
