@@ -22,7 +22,6 @@ import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.TaskRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -179,21 +178,18 @@ public class ProjectPortalService extends TenantAwareService {
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
 
-        if (callerRole == Role.ADMIN) {
-            return project;
-        }
-
-        User owner = project.getOwner();
-        boolean isOwner = owner != null && owner.getId().equals(currentUserId);
-        boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
-                projectId,
+        boolean isMemberFreelancer = callerRole == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                        projectId,
+                        currentUserId,
+                        tenantId
+                );
+        ProjectAccessPolicy.requireReadAccess(
+                project,
                 currentUserId,
-                tenantId
-        );
-
-        if (!isOwner && !isMember) {
-            throw new AccessDeniedException("You are not allowed to view this project portal");
-        }
+                callerRole,
+                isMemberFreelancer,
+                "You are not allowed to view this project portal");
 
         return project;
     }

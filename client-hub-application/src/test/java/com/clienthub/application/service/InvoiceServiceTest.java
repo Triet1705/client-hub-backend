@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -119,6 +120,117 @@ class InvoiceServiceTest {
     }
 
     @Test
+    void getInvoiceById_WhenCallerIsCorrectRoleClient_ShouldAllow() {
+        Invoice invoice = createProjectInvoice();
+        InvoiceResponse expected = new InvoiceResponse();
+        stubDirectInvoice(invoice.getClient(), invoice);
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertSame(expected, invoiceService.getInvoiceByIdWithOwnershipCheck(
+                INVOICE_ID, CLIENT_ID));
+    }
+
+    @Test
+    void getInvoiceById_WhenCallerIsCorrectRoleFreelancer_ShouldAllow() {
+        Invoice invoice = createProjectInvoice();
+        InvoiceResponse expected = new InvoiceResponse();
+        stubDirectInvoice(invoice.getFreelancer(), invoice);
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertSame(expected, invoiceService.getInvoiceByIdWithOwnershipCheck(
+                INVOICE_ID, FREELANCER_ID));
+    }
+
+    @Test
+    void getInvoiceById_WhenCallerIsTenantAdmin_ShouldAllow() {
+        UUID adminId = UUID.randomUUID();
+        User admin = createUser(adminId, Role.ADMIN, "admin@example.com");
+        Invoice invoice = createProjectInvoice();
+        InvoiceResponse expected = new InvoiceResponse();
+        stubDirectInvoice(admin, invoice);
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertSame(expected, invoiceService.getInvoiceByIdWithOwnershipCheck(
+                INVOICE_ID, adminId));
+    }
+
+    @Test
+    void getInvoiceById_WhenClientPartyUuidHasFreelancerRole_ShouldDeny() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                CLIENT_ID, Role.FREELANCER, "wrong-role@example.com");
+        stubDirectInvoice(wrongRoleParty, invoice);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getInvoiceByIdWithOwnershipCheck(
+                        INVOICE_ID, CLIENT_ID));
+        verify(invoiceMapper, never()).toResponse(any(Invoice.class));
+    }
+
+    @Test
+    void getInvoiceById_WhenFreelancerPartyUuidHasClientRole_ShouldDeny() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                FREELANCER_ID, Role.CLIENT, "wrong-role@example.com");
+        stubDirectInvoice(wrongRoleParty, invoice);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getInvoiceByIdWithOwnershipCheck(
+                        INVOICE_ID, FREELANCER_ID));
+    }
+
+    @Test
+    void getInvoiceById_WhenCorrectRoleHasWrongUuid_ShouldDeny() {
+        UUID outsiderId = UUID.randomUUID();
+        Invoice invoice = createProjectInvoice();
+        User outsider = createUser(outsiderId, Role.CLIENT, "outsider@example.com");
+        stubDirectInvoice(outsider, invoice);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getInvoiceByIdWithOwnershipCheck(
+                        INVOICE_ID, outsiderId));
+    }
+
+    @Test
+    void getInvoiceById_WhenInvoiceIsCrossTenant_ShouldReturnNonDisclosingNotFound() {
+        String otherTenant = "other-tenant";
+        TenantContext.setTenantId(otherTenant);
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, otherTenant))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getInvoiceByIdWithOwnershipCheck(
+                        INVOICE_ID, CLIENT_ID));
+        verifyNoInteractions(userRepository, invoiceMapper);
+    }
+
+    @Test
+    void getAllInvoices_WhenClientPartyHasCorrectRole_ShouldAllow() {
+        Invoice invoice = createProjectInvoice();
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice.getClient()));
+        when(invoiceRepository.findByTenantId(TENANT_ID)).thenReturn(List.of(invoice));
+        InvoiceResponse expected = new InvoiceResponse();
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertEquals(List.of(expected), invoiceService.getAllInvoices(
+                null, null, CLIENT_ID));
+    }
+
+    @Test
+    void getAllInvoices_WhenPartyUuidHasWrongRole_ShouldReturnEmpty() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                CLIENT_ID, Role.FREELANCER, "wrong-role@example.com");
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(wrongRoleParty));
+        when(invoiceRepository.findByTenantId(TENANT_ID)).thenReturn(List.of(invoice));
+
+        assertTrue(invoiceService.getAllInvoices(null, null, CLIENT_ID).isEmpty());
+        verify(invoiceMapper, never()).toResponse(any(Invoice.class));
+    }
+
+    @Test
     void getInvoicesByProject_WhenCallerIsInvoiceClient_ShouldAllow() {
         Invoice invoice = createProjectInvoice();
         InvoiceResponse expected = new InvoiceResponse();
@@ -195,6 +307,107 @@ class InvoiceServiceTest {
         verify(invoiceMapper, never()).toResponse(any(Invoice.class));
     }
 
+    @Test
+    void getInvoicesByProject_WhenClientPartyUuidHasWrongRole_ShouldDeny() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                CLIENT_ID, Role.FREELANCER, "wrong-role@example.com");
+        stubProjectInvoices(CLIENT_ID, wrongRoleParty, invoice);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getInvoicesByProject(PROJECT_ID, CLIENT_ID));
+        verify(invoiceMapper, never()).toResponse(any(Invoice.class));
+    }
+
+    @Test
+    void updateStatus_WhenInvoiceClientHasCorrectRole_ShouldAllow() {
+        Invoice invoice = createProjectInvoice();
+        InvoiceResponse expected = new InvoiceResponse();
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice.getClient()));
+        when(invoiceRepository.save(invoice)).thenReturn(invoice);
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertSame(expected, invoiceService.updateStatus(
+                INVOICE_ID, InvoiceStatus.SENT, CLIENT_ID));
+        verify(invoiceRepository).save(invoice);
+    }
+
+    @Test
+    void updateStatus_WhenCallerIsTenantAdmin_ShouldAllow() {
+        UUID adminId = UUID.randomUUID();
+        User admin = createUser(adminId, Role.ADMIN, "admin@example.com");
+        Invoice invoice = createProjectInvoice();
+        InvoiceResponse expected = new InvoiceResponse();
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(adminId, TENANT_ID))
+                .thenReturn(Optional.of(admin));
+        when(invoiceRepository.save(invoice)).thenReturn(invoice);
+        when(invoiceMapper.toResponse(invoice)).thenReturn(expected);
+
+        assertSame(expected, invoiceService.updateStatus(
+                INVOICE_ID, InvoiceStatus.SENT, adminId));
+    }
+
+    @Test
+    void updateStatus_WhenClientPartyUuidHasWrongRole_ShouldDeny() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                CLIENT_ID, Role.FREELANCER, "wrong-role@example.com");
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(wrongRoleParty));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.updateStatus(
+                        INVOICE_ID, InvoiceStatus.SENT, CLIENT_ID));
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void updateStatus_WhenCorrectRoleHasWrongUuid_ShouldDeny() {
+        UUID outsiderId = UUID.randomUUID();
+        User outsider = createUser(outsiderId, Role.CLIENT, "outsider@example.com");
+        Invoice invoice = createProjectInvoice();
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(outsiderId, TENANT_ID))
+                .thenReturn(Optional.of(outsider));
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.updateStatus(
+                        INVOICE_ID, InvoiceStatus.SENT, outsiderId));
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void verifyAuditProof_WhenInvoiceFreelancerHasCorrectRole_ShouldAllow() {
+        Invoice invoice = createProjectInvoice();
+        stubDirectInvoice(invoice.getFreelancer(), invoice);
+        when(auditLogRepository.findFirstByEntityTypeAndEntityIdAndTenantIdOrderByCreatedAtDescIdDesc(
+                "INVOICE", String.valueOf(INVOICE_ID), TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertFalse(invoiceService.verifyAuditProof(
+                INVOICE_ID, FREELANCER_ID).proofAvailable());
+    }
+
+    @Test
+    void getAuditProof_WhenPartyUuidHasWrongRole_ShouldDeny() {
+        Invoice invoice = createProjectInvoice();
+        User wrongRoleParty = createUser(
+                CLIENT_ID, Role.FREELANCER, "wrong-role@example.com");
+        stubDirectInvoice(wrongRoleParty, invoice);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> invoiceService.getAuditProof(INVOICE_ID, CLIENT_ID));
+        verifyNoInteractions(auditLogRepository, auditProofReader);
+    }
+
     private Invoice createCryptoInvoice() {
         User client = createUser(CLIENT_ID, Role.CLIENT, "client@example.com");
         client.setWalletAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
@@ -241,5 +454,12 @@ class InvoiceServiceTest {
         when(projectRepository.existsByIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(true);
         when(userRepository.findByIdAndTenantId(currentUserId, TENANT_ID)).thenReturn(Optional.of(currentUser));
         when(invoiceRepository.findByProjectIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(List.of(invoice));
+    }
+
+    private void stubDirectInvoice(User currentUser, Invoice invoice) {
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(currentUser.getId(), TENANT_ID))
+                .thenReturn(Optional.of(currentUser));
     }
 }

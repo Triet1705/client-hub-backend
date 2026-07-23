@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -174,6 +175,97 @@ class ProjectPortalServiceTest {
                 anyCollection(),
                 anyCollection()
         );
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Administrator can access the project portal")
+    void getProjectFiles_Admin_ShouldAllow() {
+        Project project = createProject(OWNER_ID);
+        UUID adminId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(taskRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+        when(invoiceRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+        when(commentRepository.findProjectScopedComments(
+                eq(TENANT_ID),
+                eq(PROJECT_ID.toString()),
+                anyCollection(),
+                anyCollection()
+        )).thenReturn(List.of());
+
+        assertTrue(projectPortalService.getProjectFiles(
+                PROJECT_ID, adminId, Role.ADMIN).isEmpty());
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Client membership row cannot grant portal access")
+    void getProjectFiles_ClientMembershipEscalation_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        UUID unrelatedClientId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getProjectFiles(
+                        PROJECT_ID, unrelatedClientId, Role.CLIENT));
+
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+        verifyNoPortalDataLoaded();
+    }
+
+    @Test
+    @DisplayName("FR10: Project owner UUID with Freelancer role cannot read activity")
+    void getProjectActivity_OwnerUuidWithWrongRole_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                PROJECT_ID, OWNER_ID, TENANT_ID)).thenReturn(false);
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getProjectActivity(
+                        PROJECT_ID, OWNER_ID, Role.FREELANCER, PageRequest.of(0, 20)));
+
+        verifyNoPortalDataLoaded();
+    }
+
+    @Test
+    @DisplayName("FR15: Client membership row cannot retrieve or verify activity proof")
+    void getActivityProof_ClientMembershipEscalation_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        UUID unrelatedClientId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getActivityProof(
+                        PROJECT_ID, 99L, unrelatedClientId, Role.CLIENT, true));
+
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+        verify(auditLogRepository, never()).findById(any());
+        verify(auditProofReader, never()).verifyUserProof(anyLong());
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Cross-tenant project portal access is non-disclosing")
+    void getActivityProof_CrossTenantProject_ShouldBeNotFound() {
+        String otherTenant = "other-tenant";
+        TenantContext.setTenantId(otherTenant);
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, otherTenant))
+                .thenReturn(Optional.empty());
+
+        assertThrows(com.clienthub.application.exception.ResourceNotFoundException.class,
+                () -> projectPortalService.getActivityProof(
+                        PROJECT_ID, 99L, OWNER_ID, Role.CLIENT, false));
+
+        verifyNoPortalDataLoaded();
+        verify(auditLogRepository, never()).findById(any());
     }
 
     @Test
@@ -317,5 +409,11 @@ class ProjectPortalServiceTest {
         attachment.setMediaType("application/pdf");
         attachment.setSizeBytes(100);
         return attachment;
+    }
+
+    private void verifyNoPortalDataLoaded() {
+        verify(taskRepository, never()).findIdsByProjectIdAndTenantId(any(), any());
+        verify(invoiceRepository, never()).findIdsByProjectIdAndTenantId(any(), any());
+        verify(commentRepository, never()).findProjectScopedComments(any(), any(), any(), any());
     }
 }
