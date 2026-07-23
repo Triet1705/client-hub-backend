@@ -286,6 +286,43 @@ class TaskRepositoryTest {
                 .allMatch(t -> t.getTenantId().equals(TENANT_1)));
     }
 
+    @Test
+    @DisplayName("Relationship-scoped task queries exclude same-tenant and cross-tenant records")
+    void relationshipScopedQueries_ShouldNotBroadenVisibility() {
+        TenantContext.setTenantId(TENANT_1);
+        User otherClient = createUser(TENANT_1, "other-client@tenant1.com");
+        User freelancer = createUser(TENANT_1, "freelancer@tenant1.com");
+        freelancer.setRole(Role.FREELANCER);
+        userRepository.save(freelancer);
+        Project otherProject = createProject(TENANT_1, "Other Client Project", otherClient);
+
+        Task ownedTask = createTask(project1, "Owned by Client 1");
+        ownedTask.setAssignedTo(freelancer);
+        taskRepository.save(ownedTask);
+        createTask(otherProject, "Owned by Other Client");
+
+        TenantContext.setTenantId(TENANT_2);
+        createTask(project2, "Foreign Tenant Task");
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Page<Task> clientVisible = taskRepository.findVisibleToClient(
+                TENANT_1, user1.getId(), null, null, null, null, PageRequest.of(0, 10));
+        Page<Task> freelancerVisible = taskRepository.findVisibleToFreelancer(
+                TENANT_1, freelancer.getId(), null, null, null, PageRequest.of(0, 10));
+        Page<Task> administratorVisible = taskRepository.findVisibleToAdministrator(
+                TENANT_1, null, null, null, null, PageRequest.of(0, 10));
+
+        assertEquals(List.of("Owned by Client 1"),
+                clientVisible.map(Task::getTitle).getContent());
+        assertEquals(List.of("Owned by Client 1"),
+                freelancerVisible.map(Task::getTitle).getContent());
+        assertEquals(2, administratorVisible.getTotalElements());
+        assertTrue(administratorVisible.stream()
+                .allMatch(task -> TENANT_1.equals(task.getTenantId())));
+    }
+
     // Helper methods
     private User createUser(String tenantId, String email) {
         User user = new User();

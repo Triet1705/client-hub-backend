@@ -85,6 +85,24 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
     boolean existsByIdAndTenantId(UUID id, String tenantId);
     long countByTenantId(String tenantId);
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<ProjectStatus> statuses);
+
+    @Query("SELECT COUNT(p) FROM Project p WHERE p.owner.id = :ownerId " +
+            "AND p.tenantId = :tenantId AND p.status IN :statuses")
+    long countOwnerProjectsByUserIdAndTenantIdAndStatusIn(
+            @Param("ownerId") UUID ownerId,
+            @Param("tenantId") String tenantId,
+            @Param("statuses") List<ProjectStatus> statuses
+    );
+
+    @Query("SELECT COUNT(p) FROM Project p JOIN ProjectMember pm ON pm.id.projectId = p.id " +
+            "WHERE pm.id.userId = :userId AND pm.tenantId = :tenantId " +
+            "AND p.tenantId = :tenantId AND p.status IN :statuses")
+    long countMemberProjectsByUserIdAndTenantIdAndStatusIn(
+            @Param("userId") UUID userId,
+            @Param("tenantId") String tenantId,
+            @Param("statuses") List<ProjectStatus> statuses
+    );
+
     long countByStatusNotIn(java.util.List<ProjectStatus> statuses);
 }
 

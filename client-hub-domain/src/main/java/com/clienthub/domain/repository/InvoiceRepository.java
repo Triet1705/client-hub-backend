@@ -73,6 +73,22 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
             @Param("statuses") java.util.List<InvoiceStatus> statuses
     );
 
+    @Query("SELECT COALESCE(SUM(i.amount), 0) FROM Invoice i " +
+            "WHERE i.tenantId = :tenantId AND i.client.id = :userId AND i.status IN :statuses")
+    java.math.BigDecimal sumAmountByTenantIdAndClientIdAndStatuses(
+            @Param("tenantId") String tenantId,
+            @Param("userId") UUID userId,
+            @Param("statuses") java.util.List<InvoiceStatus> statuses
+    );
+
+    @Query("SELECT COALESCE(SUM(i.amount), 0) FROM Invoice i " +
+            "WHERE i.tenantId = :tenantId AND i.freelancer.id = :userId AND i.status IN :statuses")
+    java.math.BigDecimal sumAmountByTenantIdAndFreelancerIdAndStatuses(
+            @Param("tenantId") String tenantId,
+            @Param("userId") UUID userId,
+            @Param("statuses") java.util.List<InvoiceStatus> statuses
+    );
+
     @Query("SELECT COALESCE(SUM(i.amount), 0) FROM Invoice i WHERE i.status IN :statuses")
     java.math.BigDecimal sumAmountByStatuses(
             @Param("statuses") java.util.List<InvoiceStatus> statuses
