@@ -15,7 +15,6 @@ import com.clienthub.application.service.ProjectPortalService;
 import com.clienthub.application.service.ProjectService;
 import com.clienthub.application.service.AnalyticsService;
 import com.clienthub.application.dto.analytics.ProjectProgressResponse;
-import com.clienthub.common.context.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -80,8 +79,12 @@ public class ProjectController {
     @GetMapping("/{id}/progress")
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
     @Operation(summary = "Get project progress", description = "Returns backend-computed task completion progress for a project.")
-    public ResponseEntity<ProjectProgressResponse> getProjectProgress(@PathVariable UUID id) {
-        return ResponseEntity.ok(analyticsService.getProjectProgress(id, TenantContext.getTenantId()));
+    public ResponseEntity<ProjectProgressResponse> getProjectProgress(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(
+                analyticsService.getProjectProgress(id, currentUser.getId(), callerRole));
     }
 
     @GetMapping("/{id}/files")

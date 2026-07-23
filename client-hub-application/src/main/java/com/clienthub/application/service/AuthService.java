@@ -153,6 +153,7 @@ public class AuthService {
                     "Refresh token not found in database."));
     }
 
+    @Transactional(readOnly = true)
     public User getUserByEmail(String email, String tenantId) {
         return userRepository.findByEmailCustom(email, resolveRequiredTenantId(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("User not found with email: " + email));
