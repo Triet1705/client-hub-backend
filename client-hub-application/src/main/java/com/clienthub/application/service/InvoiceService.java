@@ -148,31 +148,31 @@ public class InvoiceService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public InvoiceResponse getInvoiceById(Long id) {
-        String tenantId = getCurrentTenantId();
-        Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
-
-        return invoiceMapper.toResponse(invoice);
-    }
-
-    @Transactional(readOnly = true)
     public InvoiceResponse getInvoiceByIdWithOwnershipCheck(Long id, UUID currentUserId) {
         return invoiceMapper.toResponse(findAuthorizedInvoice(id, currentUserId));
     }
 
     @Transactional(readOnly = true)
-    public List<InvoiceResponse> getInvoicesByProject(UUID projectId) {
+    public List<InvoiceResponse> getInvoicesByProject(UUID projectId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
 
         if (!projectRepository.existsByIdAndTenantId(projectId, tenantId)) {
             throw new ResourceNotFoundException("Project not found or access denied");
         }
 
-        return invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        List<InvoiceResponse> authorizedInvoices = invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
                 .stream()
+                .filter(invoice -> canReadInvoice(invoice, currentUser))
                 .map(invoiceMapper::toResponse)
                 .collect(Collectors.toList());
+
+        if (currentUser.getRole() != Role.ADMIN && authorizedInvoices.isEmpty()) {
+            throw new ResourceNotFoundException("Project invoices not found or access denied");
+        }
+
+        return authorizedInvoices;
     }
 
     public InvoiceResponse updateStatus(Long id, InvoiceStatus newStatus, UUID currentUserId) {
@@ -186,10 +186,11 @@ public class InvoiceService extends TenantAwareService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
-        UUID clientId = invoice.getClient().getId();
-        boolean isClient = currentUserId.equals(clientId);
+        boolean isInvoiceClient = currentUser.getRole() == Role.CLIENT
+                && invoice.getClient() != null
+                && currentUserId.equals(invoice.getClient().getId());
         
-        if (!isClient && !isAdmin) {
+        if (!isInvoiceClient && !isAdmin) {
             throw new ResourceNotFoundException("You do not have permission to update this invoice");
         }
 
@@ -250,12 +251,22 @@ public class InvoiceService extends TenantAwareService {
         User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (currentUser.getRole() != Role.ADMIN
-                && !currentUserId.equals(invoice.getClient().getId())
-                && !currentUserId.equals(invoice.getFreelancer().getId())) {
+        if (!canReadInvoice(invoice, currentUser)) {
             throw new ResourceNotFoundException("Invoice not found or access denied");
         }
         return invoice;
+    }
+
+    private boolean canReadInvoice(Invoice invoice, User currentUser) {
+        Role role = currentUser.getRole();
+        UUID currentUserId = currentUser.getId();
+        return role == Role.ADMIN
+                || (role == Role.CLIENT
+                    && invoice.getClient() != null
+                    && currentUserId.equals(invoice.getClient().getId()))
+                || (role == Role.FREELANCER
+                    && invoice.getFreelancer() != null
+                    && currentUserId.equals(invoice.getFreelancer().getId()));
     }
 
     @Transactional(readOnly = true)
@@ -264,8 +275,6 @@ public class InvoiceService extends TenantAwareService {
 
         User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
-
         List<Invoice> invoices;
         if (projectId != null && status != null) {
             invoices = invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
@@ -284,9 +293,7 @@ public class InvoiceService extends TenantAwareService {
         }
 
         return invoices.stream()
-                .filter(invoice -> isAdmin || 
-                        invoice.getClient().getId().equals(currentUserId) || 
-                        invoice.getFreelancer().getId().equals(currentUserId))
+                .filter(invoice -> canReadInvoice(invoice, currentUser))
                 .map(invoiceMapper::toResponse)
                 .collect(Collectors.toList());
     }

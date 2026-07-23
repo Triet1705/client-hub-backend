@@ -27,31 +27,25 @@ public class CommunicationService extends TenantAwareService {
     private final CommentRepository commentRepository;
     private final NotificationRepository notificationRepository;
 
-    private final ProjectRepository projectRepository;
-    private final ProjectMemberRepository projectMemberRepository;
-    private final TaskRepository taskRepository;
-    private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final TargetAccessService targetAccessService;
+    private final AttachmentService attachmentService;
 
     public CommunicationService(CommunicationThreadRepository threadRepository,
                                 CommentRepository commentRepository,
                                 NotificationRepository notificationRepository,
-                                ProjectRepository projectRepository,
-                                ProjectMemberRepository projectMemberRepository,
-                                TaskRepository taskRepository,
-                                InvoiceRepository invoiceRepository,
                                 UserRepository userRepository,
-                                UserService userService) {
+                                UserService userService,
+                                TargetAccessService targetAccessService,
+                                AttachmentService attachmentService) {
         this.threadRepository = threadRepository;
         this.commentRepository = commentRepository;
         this.notificationRepository = notificationRepository;
-        this.projectRepository = projectRepository;
-        this.projectMemberRepository = projectMemberRepository;
-        this.taskRepository = taskRepository;
-        this.invoiceRepository = invoiceRepository;
         this.userRepository = userRepository;
         this.userService = userService;
+        this.targetAccessService = targetAccessService;
+        this.attachmentService = attachmentService;
     }
 
     @LogAudit(action = AuditAction.CREATE, entityType = "COMMENT", entityId = "#result.id")
@@ -60,11 +54,15 @@ public class CommunicationService extends TenantAwareService {
         User author = userRepository.findByIdAndTenantId(authorId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        User recipientForNotification = validateAccessAndGetRecipient(targetType, targetId, tenantId, authorId);
+        TargetAccessService.AuthorizedTarget authorizedTarget =
+                targetAccessService.authorize(targetType, targetId, authorId);
+        attachmentService.validateCommentAttachmentReferences(
+                attachmentUrls, targetType, authorizedTarget.targetId());
 
         CommunicationThread thread = threadRepository
-                .findByTargetTypeAndTargetIdAndTenantId(targetType, targetId, tenantId)
-                .orElseGet(() -> createThread(targetType, targetId, tenantId, author, "General Discussion"));
+                .findByTargetTypeAndTargetIdAndTenantId(targetType, authorizedTarget.targetId(), tenantId)
+                .orElseGet(() -> createThread(
+                        targetType, authorizedTarget.targetId(), tenantId, author, "General Discussion"));
 
         Comment comment = new Comment();
         comment.setTenantId(tenantId);
@@ -77,8 +75,10 @@ public class CommunicationService extends TenantAwareService {
 
         Comment savedComment = commentRepository.save(comment);
 
+        User recipientForNotification = authorizedTarget.notificationRecipient();
         if (recipientForNotification != null && !recipientForNotification.getId().equals(authorId)) {
-            sendNotification(recipientForNotification, author, targetType, targetId, tenantId);
+            sendNotification(
+                    recipientForNotification, author, targetType, authorizedTarget.targetId(), tenantId);
         }
 
         return savedComment;
@@ -87,9 +87,11 @@ public class CommunicationService extends TenantAwareService {
     @Transactional(readOnly = true)
     public Page<Comment> getComments(CommentTargetType targetType, String targetId, Pageable pageable, UUID userId) {
         String tenantId = getCurrentTenantId();
-        validateAccessAndGetRecipient(targetType, targetId, tenantId, userId);
+        TargetAccessService.AuthorizedTarget authorizedTarget =
+                targetAccessService.authorize(targetType, targetId, userId);
 
-        return threadRepository.findByTargetTypeAndTargetIdAndTenantId(targetType, targetId, tenantId)
+        return threadRepository.findByTargetTypeAndTargetIdAndTenantId(
+                        targetType, authorizedTarget.targetId(), tenantId)
                 .map(thread -> commentRepository.findByThreadIdAndTenantId(thread.getId(), tenantId, pageable))
                 .orElse(Page.empty());
     }
@@ -145,86 +147,6 @@ public class CommunicationService extends TenantAwareService {
         thread.setStatus(ThreadStatus.OPEN);
         thread.setAuthor(author);
         return threadRepository.save(thread);
-    }
-
-    private User validateAccessAndGetRecipient(CommentTargetType targetType, String targetId, String tenantId, UUID userId) {
-        switch (targetType) {
-            case PROJECT:
-                return validateProjectAccess(UUID.fromString(targetId), tenantId, userId);
-            case TASK:
-                return validateTaskAccess(UUID.fromString(targetId), tenantId, userId);
-            case INVOICE:
-                return validateInvoiceAccess(Long.parseLong(targetId), tenantId, userId);
-            default:
-                throw new IllegalArgumentException("Unknown target type");
-        }
-    }
-
-    private User validateProjectAccess(UUID projectId, String tenantId, UUID userId) {
-        Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
-
-        User projectOwner = project.getOwner();
-        if (projectOwner == null) {
-            throw new ResourceNotFoundException("Project owner not configured");
-        }
-
-        boolean isOwner = projectOwner.getId().equals(userId);
-
-        boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
-            projectId, userId, tenantId);
-
-        if (!isOwner && !isMember) {
-            User user = userRepository.findByIdAndTenantId(userId, tenantId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-            if (user.getRole() != Role.ADMIN) {
-                throw new AccessDeniedException("You are not a member of this project (Owner or Explicit Member)");
-            }
-        }
-
-        return isOwner ? null : projectOwner;
-    }
-
-    private User validateTaskAccess(UUID taskId, String tenantId, UUID userId) {
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
-
-        User assignee = task.getAssignedTo();
-        User projectOwner = task.getProject().getOwner();
-
-        boolean isAssignee = assignee != null && assignee.getId().equals(userId);
-        boolean isOwner = projectOwner.getId().equals(userId);
-
-        if (!isAssignee && !isOwner) {
-            User user = userRepository.findByIdAndTenantId(userId, tenantId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
-            if (user.getRole() != Role.ADMIN) {
-                throw new AccessDeniedException("Only the assignee or project owner can comment on this task");
-            }
-        }
-
-        if (isOwner) return assignee;
-        return projectOwner;
-    }
-
-    private User validateInvoiceAccess(Long invoiceId, String tenantId, UUID userId) {
-        Invoice invoice = invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
-
-        User client = invoice.getClient();
-        User freelancer = invoice.getFreelancer();
-
-        boolean isClient = client.getId().equals(userId);
-        boolean isFreelancer = freelancer.getId().equals(userId);
-
-        if (!isClient && !isFreelancer) {
-            User user = userRepository.findByIdAndTenantId(userId, tenantId).orElseThrow(() -> new ResourceNotFoundException("User not found"));
-            if (user.getRole() != Role.ADMIN) {
-                throw new AccessDeniedException("Access denied to invoice comments");
-            }
-        }
-
-        if (isClient) return freelancer;
-        return client;
     }
 
     private void sendNotification(User recipient, User sender, CommentTargetType type, String targetId, String tenantId) {

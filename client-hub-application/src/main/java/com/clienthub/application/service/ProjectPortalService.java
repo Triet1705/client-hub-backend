@@ -6,11 +6,13 @@ import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.AuditLog;
+import com.clienthub.domain.entity.Attachment;
 import com.clienthub.domain.entity.Comment;
 import com.clienthub.domain.entity.CommunicationThread;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.AuditAction;
+import com.clienthub.domain.enums.CommentTargetType;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.domain.repository.AuditLogRepository;
 import com.clienthub.domain.repository.CommentRepository;
@@ -20,13 +22,9 @@ import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.TaskRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -47,6 +45,7 @@ public class ProjectPortalService extends TenantAwareService {
     private final CommentRepository commentRepository;
     private final AuditLogRepository auditLogRepository;
     private final AuditProofReader auditProofReader;
+    private final AttachmentService attachmentService;
 
     public ProjectPortalService(ProjectRepository projectRepository,
                                 ProjectMemberRepository projectMemberRepository,
@@ -54,7 +53,8 @@ public class ProjectPortalService extends TenantAwareService {
                                 InvoiceRepository invoiceRepository,
                                 CommentRepository commentRepository,
                                 AuditLogRepository auditLogRepository,
-                                AuditProofReader auditProofReader) {
+                                AuditProofReader auditProofReader,
+                                AttachmentService attachmentService) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.taskRepository = taskRepository;
@@ -62,6 +62,7 @@ public class ProjectPortalService extends TenantAwareService {
         this.commentRepository = commentRepository;
         this.auditLogRepository = auditLogRepository;
         this.auditProofReader = auditProofReader;
+        this.attachmentService = attachmentService;
     }
 
     public List<ProjectFileResponse> getProjectFiles(UUID projectId, UUID currentUserId, Role callerRole) {
@@ -79,7 +80,11 @@ public class ProjectPortalService extends TenantAwareService {
             }
 
             CommunicationThread thread = comment.getThread();
-            String sourceType = thread != null && thread.getTargetType() != null ? thread.getTargetType().name() : "PROJECT";
+            CommentTargetType sourceTargetType =
+                    thread != null && thread.getTargetType() != null
+                            ? thread.getTargetType()
+                            : CommentTargetType.PROJECT;
+            String sourceType = sourceTargetType.name();
             String sourceId = thread != null ? thread.getTargetId() : projectId.toString();
             String authorName = resolveAuthorName(comment.getAuthor());
 
@@ -87,19 +92,30 @@ public class ProjectPortalService extends TenantAwareService {
                 if (fileUrl == null || fileUrl.isBlank()) {
                     continue;
                 }
-                files.add(new ProjectFileResponse(
-                        fileUrl,
-                        deriveFileName(fileUrl),
-                        sourceType,
-                        sourceId,
-                        comment.getId(),
-                        authorName,
-                        comment.getCreatedAt()
-                ));
+                attachmentService.findAuthorizedProtectedReference(
+                                fileUrl, sourceTargetType, sourceId, currentUserId)
+                        .ifPresent(attachment -> files.add(toProjectFile(
+                                attachment, comment, sourceType, sourceId, authorName)));
             }
         }
 
         return files;
+    }
+
+    private ProjectFileResponse toProjectFile(Attachment attachment,
+                                              Comment comment,
+                                              String sourceType,
+                                              String sourceId,
+                                              String authorName) {
+        return new ProjectFileResponse(
+                "/api/attachments/" + attachment.getId(),
+                attachment.getOriginalFilename(),
+                sourceType,
+                sourceId,
+                comment.getId(),
+                authorName,
+                comment.getCreatedAt()
+        );
     }
 
     public Page<ProjectActivityResponse> getProjectActivity(UUID projectId, UUID currentUserId, Role callerRole, Pageable pageable) {
@@ -162,21 +178,18 @@ public class ProjectPortalService extends TenantAwareService {
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
 
-        if (callerRole == Role.ADMIN) {
-            return project;
-        }
-
-        User owner = project.getOwner();
-        boolean isOwner = owner != null && owner.getId().equals(currentUserId);
-        boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
-                projectId,
+        boolean isMemberFreelancer = callerRole == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                        projectId,
+                        currentUserId,
+                        tenantId
+                );
+        ProjectAccessPolicy.requireReadAccess(
+                project,
                 currentUserId,
-                tenantId
-        );
-
-        if (!isOwner && !isMember) {
-            throw new AccessDeniedException("You are not allowed to view this project portal");
-        }
+                callerRole,
+                isMemberFreelancer,
+                "You are not allowed to view this project portal");
 
         return project;
     }
@@ -293,31 +306,6 @@ public class ProjectPortalService extends TenantAwareService {
         }
 
         return "Unknown";
-    }
-
-    private String deriveFileName(String fileUrl) {
-        String path = fileUrl;
-        try {
-            URI uri = URI.create(fileUrl);
-            if (uri.getPath() != null && !uri.getPath().isBlank()) {
-                path = uri.getPath();
-            }
-        } catch (IllegalArgumentException ignored) {
-            path = fileUrl;
-        }
-
-        int queryIndex = path.indexOf('?');
-        if (queryIndex >= 0) {
-            path = path.substring(0, queryIndex);
-        }
-
-        int slashIndex = path.lastIndexOf('/');
-        String fileName = slashIndex >= 0 ? path.substring(slashIndex + 1) : path;
-        if (fileName.isBlank()) {
-            return "Attachment";
-        }
-
-        return URLDecoder.decode(fileName, StandardCharsets.UTF_8);
     }
 
     private record TargetIndex(List<String> taskIds, List<String> invoiceIds) {

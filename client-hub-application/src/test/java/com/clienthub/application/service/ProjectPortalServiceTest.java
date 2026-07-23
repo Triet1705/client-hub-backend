@@ -4,6 +4,7 @@ import com.clienthub.application.dto.project.ProjectActivityResponse;
 import com.clienthub.application.dto.project.ProjectFileResponse;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.AuditLog;
+import com.clienthub.domain.entity.Attachment;
 import com.clienthub.domain.entity.Comment;
 import com.clienthub.domain.entity.CommunicationThread;
 import com.clienthub.domain.entity.Project;
@@ -40,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -78,6 +80,9 @@ class ProjectPortalServiceTest {
     @Mock
     private AuditProofReader auditProofReader;
 
+    @Mock
+    private AttachmentService attachmentService;
+
     @InjectMocks
     private ProjectPortalService projectPortalService;
 
@@ -95,12 +100,15 @@ class ProjectPortalServiceTest {
     @DisplayName("Project files include attachments from project, task, and invoice comments")
     void getProjectFiles_AggregatesScopedCommentAttachments() {
         Project project = createProject(OWNER_ID);
+        UUID projectAttachmentId = UUID.randomUUID();
+        UUID taskAttachmentId = UUID.randomUUID();
+        UUID invoiceAttachmentId = UUID.randomUUID();
         Comment projectComment = createComment(10L, CommentTargetType.PROJECT, PROJECT_ID.toString(), OWNER_ID,
-                List.of("/attachments/project-brief.pdf"));
+                List.of("/api/attachments/" + projectAttachmentId));
         Comment taskComment = createComment(11L, CommentTargetType.TASK, TASK_ID.toString(), MEMBER_ID,
-                List.of("http://localhost:8080/api/attachments/task%20screenshot.png"));
+                List.of("/api/attachments/" + taskAttachmentId));
         Comment invoiceComment = createComment(12L, CommentTargetType.INVOICE, INVOICE_ID.toString(), MEMBER_ID,
-                List.of("/attachments/invoice-note.txt"));
+                List.of("/api/attachments/" + invoiceAttachmentId, "/uploads/attachments/legacy.txt"));
 
         when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(Optional.of(project));
         when(taskRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(List.of(TASK_ID));
@@ -111,6 +119,33 @@ class ProjectPortalServiceTest {
                 eq(List.of(TASK_ID.toString())),
                 eq(List.of(INVOICE_ID.toString()))
         )).thenReturn(List.of(projectComment, taskComment, invoiceComment));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + projectAttachmentId,
+                CommentTargetType.PROJECT,
+                PROJECT_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        projectAttachmentId, CommentTargetType.PROJECT, PROJECT_ID.toString(), "project-brief.pdf")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + taskAttachmentId,
+                CommentTargetType.TASK,
+                TASK_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        taskAttachmentId, CommentTargetType.TASK, TASK_ID.toString(), "task screenshot.png")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + invoiceAttachmentId,
+                CommentTargetType.INVOICE,
+                INVOICE_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        invoiceAttachmentId, CommentTargetType.INVOICE, INVOICE_ID.toString(), "invoice-note.txt")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/uploads/attachments/legacy.txt",
+                CommentTargetType.INVOICE,
+                INVOICE_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.empty());
 
         List<ProjectFileResponse> files = projectPortalService.getProjectFiles(PROJECT_ID, OWNER_ID, Role.CLIENT);
 
@@ -140,6 +175,97 @@ class ProjectPortalServiceTest {
                 anyCollection(),
                 anyCollection()
         );
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Administrator can access the project portal")
+    void getProjectFiles_Admin_ShouldAllow() {
+        Project project = createProject(OWNER_ID);
+        UUID adminId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(taskRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+        when(invoiceRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+        when(commentRepository.findProjectScopedComments(
+                eq(TENANT_ID),
+                eq(PROJECT_ID.toString()),
+                anyCollection(),
+                anyCollection()
+        )).thenReturn(List.of());
+
+        assertTrue(projectPortalService.getProjectFiles(
+                PROJECT_ID, adminId, Role.ADMIN).isEmpty());
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Client membership row cannot grant portal access")
+    void getProjectFiles_ClientMembershipEscalation_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        UUID unrelatedClientId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getProjectFiles(
+                        PROJECT_ID, unrelatedClientId, Role.CLIENT));
+
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+        verifyNoPortalDataLoaded();
+    }
+
+    @Test
+    @DisplayName("FR10: Project owner UUID with Freelancer role cannot read activity")
+    void getProjectActivity_OwnerUuidWithWrongRole_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                PROJECT_ID, OWNER_ID, TENANT_ID)).thenReturn(false);
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getProjectActivity(
+                        PROJECT_ID, OWNER_ID, Role.FREELANCER, PageRequest.of(0, 20)));
+
+        verifyNoPortalDataLoaded();
+    }
+
+    @Test
+    @DisplayName("FR15: Client membership row cannot retrieve or verify activity proof")
+    void getActivityProof_ClientMembershipEscalation_ShouldBeDenied() {
+        Project project = createProject(OWNER_ID);
+        UUID unrelatedClientId = UUID.randomUUID();
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectPortalService.getActivityProof(
+                        PROJECT_ID, 99L, unrelatedClientId, Role.CLIENT, true));
+
+        verify(projectMemberRepository, never())
+                .existsByIdProjectIdAndIdUserIdAndTenantId(any(), any(), any());
+        verify(auditLogRepository, never()).findById(any());
+        verify(auditProofReader, never()).verifyUserProof(anyLong());
+    }
+
+    @Test
+    @DisplayName("FR04/FR10/FR15: Cross-tenant project portal access is non-disclosing")
+    void getActivityProof_CrossTenantProject_ShouldBeNotFound() {
+        String otherTenant = "other-tenant";
+        TenantContext.setTenantId(otherTenant);
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, otherTenant))
+                .thenReturn(Optional.empty());
+
+        assertThrows(com.clienthub.application.exception.ResourceNotFoundException.class,
+                () -> projectPortalService.getActivityProof(
+                        PROJECT_ID, 99L, OWNER_ID, Role.CLIENT, false));
+
+        verifyNoPortalDataLoaded();
+        verify(auditLogRepository, never()).findById(any());
     }
 
     @Test
@@ -267,5 +393,27 @@ class ProjectPortalServiceTest {
                 .role(role)
                 .active(true)
                 .build();
+    }
+
+    private Attachment createAttachment(UUID id,
+                                        CommentTargetType targetType,
+                                        String targetId,
+                                        String originalFilename) {
+        Attachment attachment = new Attachment();
+        attachment.setId(id);
+        attachment.setTenantId(TENANT_ID);
+        attachment.setTargetType(targetType);
+        attachment.setTargetId(targetId);
+        attachment.setOriginalFilename(originalFilename);
+        attachment.setStorageKey(UUID.randomUUID().toString());
+        attachment.setMediaType("application/pdf");
+        attachment.setSizeBytes(100);
+        return attachment;
+    }
+
+    private void verifyNoPortalDataLoaded() {
+        verify(taskRepository, never()).findIdsByProjectIdAndTenantId(any(), any());
+        verify(invoiceRepository, never()).findIdsByProjectIdAndTenantId(any(), any());
+        verify(commentRepository, never()).findProjectScopedComments(any(), any(), any(), any());
     }
 }

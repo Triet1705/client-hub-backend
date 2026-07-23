@@ -104,40 +104,47 @@ public class ProjectService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ProjectResponse> getProjects(ProjectStatus status, Pageable pageable) {
-        return getProjects(status, pageable, null, null);
-    }
-
-    @Transactional(readOnly = true)
     public Page<ProjectResponse> getProjects(ProjectStatus status, Pageable pageable, UUID currentUserId, Role callerRole) {
-        String tenantId = getCurrentTenantId(); // MEDIUM 6: Null safety
-
-        Page<Project> projects;
-        if (callerRole == Role.FREELANCER && currentUserId != null) {
-            if (status != null) {
-                projects = projectRepository.findMemberProjectsByUserIdAndTenantIdAndStatus(
-                        currentUserId, tenantId, status, pageable);
-            } else {
-                projects = projectRepository.findMemberProjectsByUserIdAndTenantId(
-                        currentUserId, tenantId, pageable);
-            }
-        } else {
-            if (status != null) {
-                projects = projectRepository.findByTenantIdAndStatus(tenantId, status, pageable);
-            } else {
-                projects = projectRepository.findAllByTenantId(tenantId, pageable);
-            }
+        String tenantId = getCurrentTenantId();
+        if (currentUserId == null || callerRole == null) {
+            throw new AccessDeniedException("A supported authenticated role is required to list projects");
         }
+
+        Page<Project> projects = switch (callerRole) {
+            case CLIENT -> status == null
+                    ? projectRepository.findOwnerProjectsByUserIdAndTenantId(
+                            currentUserId, tenantId, pageable)
+                    : projectRepository.findOwnerProjectsByUserIdAndTenantIdAndStatus(
+                            currentUserId, tenantId, status, pageable);
+            case FREELANCER -> status == null
+                    ? projectRepository.findMemberProjectsByUserIdAndTenantId(
+                            currentUserId, tenantId, pageable)
+                    : projectRepository.findMemberProjectsByUserIdAndTenantIdAndStatus(
+                            currentUserId, tenantId, status, pageable);
+            case ADMIN -> status == null
+                    ? projectRepository.findAllByTenantId(tenantId, pageable)
+                    : projectRepository.findByTenantIdAndStatus(tenantId, status, pageable);
+        };
 
         return projects.map(projectMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public ProjectResponse getProjectById(UUID projectId) {
+    public ProjectResponse getProjectById(UUID projectId, UUID currentUserId, Role callerRole) {
         String tenantId = getCurrentTenantId();
 
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+
+        boolean isMemberFreelancer = callerRole == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                        projectId, currentUserId, tenantId);
+        ProjectAccessPolicy.requireReadAccess(
+                project,
+                currentUserId,
+                callerRole,
+                isMemberFreelancer,
+                "You are not allowed to view this project");
 
         return projectMapper.toResponse(project);
     }
@@ -248,14 +255,15 @@ public class ProjectService extends TenantAwareService {
         Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
 
-        boolean isAdmin = callerRole == Role.ADMIN;
-        boolean isOwner = project.getOwner().getId().equals(currentUserId);
-        boolean isMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
-                projectId, currentUserId, tenantId);
-
-        if (!isAdmin && !isOwner && !isMember) {
-            throw new AccessDeniedException("You are not allowed to view members of this project");
-        }
+        boolean isMemberFreelancer = callerRole == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                        projectId, currentUserId, tenantId);
+        ProjectAccessPolicy.requireReadAccess(
+                project,
+                currentUserId,
+                callerRole,
+                isMemberFreelancer,
+                "You are not allowed to view members of this project");
 
         return projectMemberRepository.findByIdProjectIdAndTenantId(projectId, tenantId)
                 .stream()

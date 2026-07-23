@@ -97,6 +97,7 @@ public class RlsIntegrationTest {
         try (Connection superConn = getSuperuserConnection()) {
             try (Statement stmt = superConn.createStatement()) {
                 stmt.execute("DROP TABLE IF EXISTS users CASCADE");
+                stmt.execute(String.format("DROP OWNED BY %s", APP_USER));
                 stmt.execute(String.format("DROP ROLE IF EXISTS %s", APP_USER));
             }
         }
@@ -207,9 +208,9 @@ public class RlsIntegrationTest {
 
     private static void setTenant(Connection conn, String tenantId) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
-                "SET LOCAL app.current_tenant = ?")) {
+                "SELECT set_config('app.current_tenant', ?, false)")) {
             ps.setString(1, tenantId);
-            ps.execute();
+            ps.executeQuery();
         }
     }
 }

@@ -46,8 +46,10 @@ public class InvoiceController {
 
     @GetMapping("/project/{projectId}")
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
-    public ResponseEntity<List<InvoiceResponse>> getInvoicesByProject(@PathVariable UUID projectId) {
-        return ResponseEntity.ok(invoiceService.getInvoicesByProject(projectId));
+    public ResponseEntity<List<InvoiceResponse>> getInvoicesByProject(
+            @PathVariable UUID projectId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(invoiceService.getInvoicesByProject(projectId, currentUser.getId()));
     }
 
     @PatchMapping("/{id}/status")
