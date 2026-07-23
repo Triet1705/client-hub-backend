@@ -162,17 +162,30 @@ public class InvoiceService extends TenantAwareService {
     }
 
     @Transactional(readOnly = true)
-    public List<InvoiceResponse> getInvoicesByProject(UUID projectId) {
+    public List<InvoiceResponse> getInvoicesByProject(UUID projectId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
 
         if (!projectRepository.existsByIdAndTenantId(projectId, tenantId)) {
             throw new ResourceNotFoundException("Project not found or access denied");
         }
 
-        return invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
+        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
+
+        List<InvoiceResponse> authorizedInvoices = invoiceRepository.findByProjectIdAndTenantId(projectId, tenantId)
                 .stream()
+                .filter(invoice -> isAdmin
+                        || currentUserId.equals(invoice.getClient().getId())
+                        || currentUserId.equals(invoice.getFreelancer().getId()))
                 .map(invoiceMapper::toResponse)
                 .collect(Collectors.toList());
+
+        if (!isAdmin && authorizedInvoices.isEmpty()) {
+            throw new ResourceNotFoundException("Project invoices not found or access denied");
+        }
+
+        return authorizedInvoices;
     }
 
     public InvoiceResponse updateStatus(Long id, InvoiceStatus newStatus, UUID currentUserId) {

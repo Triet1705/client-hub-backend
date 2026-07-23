@@ -155,9 +155,9 @@ class AuthRestrictedRlsIntegrationTest {
             assertFalse(role.path("bypassRls").asBoolean());
 
             ResultSet forcedRls = statement.executeQuery("""
-                    SELECT bool_and(relforcerowsecurity)
+                    SELECT count(*) = 3 AND bool_and(relrowsecurity AND relforcerowsecurity)
                     FROM pg_class
-                    WHERE relname IN ('users', 'refresh_tokens')
+                    WHERE relname IN ('users', 'refresh_tokens', 'attachments')
                     """);
             assertTrue(forcedRls.next());
             assertTrue(forcedRls.getBoolean(1));

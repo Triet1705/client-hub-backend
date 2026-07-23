@@ -1,6 +1,6 @@
 package com.clienthub.application.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public class AttachmentResponseDto {
@@ -8,16 +8,19 @@ public class AttachmentResponseDto {
     private String fileUrl;
     private String fileName;
     private String fileType;
-    private LocalDateTime uploadedAt;
+    private long sizeBytes;
+    private Instant uploadedAt;
 
     public AttachmentResponseDto() {
     }
 
-    public AttachmentResponseDto(UUID id, String fileUrl, String fileName, String fileType, LocalDateTime uploadedAt) {
+    public AttachmentResponseDto(UUID id, String fileUrl, String fileName, String fileType,
+                                 long sizeBytes, Instant uploadedAt) {
         this.id = id;
         this.fileUrl = fileUrl;
         this.fileName = fileName;
         this.fileType = fileType;
+        this.sizeBytes = sizeBytes;
         this.uploadedAt = uploadedAt;
     }
 
@@ -53,11 +56,19 @@ public class AttachmentResponseDto {
         this.fileType = fileType;
     }
 
-    public LocalDateTime getUploadedAt() {
+    public long getSizeBytes() {
+        return sizeBytes;
+    }
+
+    public void setSizeBytes(long sizeBytes) {
+        this.sizeBytes = sizeBytes;
+    }
+
+    public Instant getUploadedAt() {
         return uploadedAt;
     }
 
-    public void setUploadedAt(LocalDateTime uploadedAt) {
+    public void setUploadedAt(Instant uploadedAt) {
         this.uploadedAt = uploadedAt;
     }
 }

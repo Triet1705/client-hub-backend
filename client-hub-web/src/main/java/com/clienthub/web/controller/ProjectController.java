@@ -72,8 +72,11 @@ public class ProjectController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('CLIENT', 'FREELANCER', 'ADMIN')")
-    public ResponseEntity<ProjectResponse> getProjectById(@PathVariable UUID id) {
-        return ResponseEntity.ok(projectService.getProjectById(id));
+    public ResponseEntity<ProjectResponse> getProjectById(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Role callerRole = Role.valueOf(currentUser.getRole());
+        return ResponseEntity.ok(projectService.getProjectById(id, currentUser.getId(), callerRole));
     }
 
     @GetMapping("/{id}/progress")

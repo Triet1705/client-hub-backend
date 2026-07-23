@@ -150,6 +150,11 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration combine.self="override">
                             <groups>integration</groups>
+                            <!-- Testcontainers 1.20.x otherwise defaults to Docker API 1.32,
+                                 which Docker Desktop 29 no longer accepts. -->
+                            <systemPropertyVariables>
+                                <api.version>1.44</api.version>
+                            </systemPropertyVariables>
                         </configuration>
                     </plugin>
                 </plugins>

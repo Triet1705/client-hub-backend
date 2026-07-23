@@ -4,6 +4,7 @@ import com.clienthub.application.dto.project.ProjectActivityResponse;
 import com.clienthub.application.dto.project.ProjectFileResponse;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.AuditLog;
+import com.clienthub.domain.entity.Attachment;
 import com.clienthub.domain.entity.Comment;
 import com.clienthub.domain.entity.CommunicationThread;
 import com.clienthub.domain.entity.Project;
@@ -78,6 +79,9 @@ class ProjectPortalServiceTest {
     @Mock
     private AuditProofReader auditProofReader;
 
+    @Mock
+    private AttachmentService attachmentService;
+
     @InjectMocks
     private ProjectPortalService projectPortalService;
 
@@ -95,12 +99,15 @@ class ProjectPortalServiceTest {
     @DisplayName("Project files include attachments from project, task, and invoice comments")
     void getProjectFiles_AggregatesScopedCommentAttachments() {
         Project project = createProject(OWNER_ID);
+        UUID projectAttachmentId = UUID.randomUUID();
+        UUID taskAttachmentId = UUID.randomUUID();
+        UUID invoiceAttachmentId = UUID.randomUUID();
         Comment projectComment = createComment(10L, CommentTargetType.PROJECT, PROJECT_ID.toString(), OWNER_ID,
-                List.of("/attachments/project-brief.pdf"));
+                List.of("/api/attachments/" + projectAttachmentId));
         Comment taskComment = createComment(11L, CommentTargetType.TASK, TASK_ID.toString(), MEMBER_ID,
-                List.of("http://localhost:8080/api/attachments/task%20screenshot.png"));
+                List.of("/api/attachments/" + taskAttachmentId));
         Comment invoiceComment = createComment(12L, CommentTargetType.INVOICE, INVOICE_ID.toString(), MEMBER_ID,
-                List.of("/attachments/invoice-note.txt"));
+                List.of("/api/attachments/" + invoiceAttachmentId, "/uploads/attachments/legacy.txt"));
 
         when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(Optional.of(project));
         when(taskRepository.findIdsByProjectIdAndTenantId(PROJECT_ID, TENANT_ID)).thenReturn(List.of(TASK_ID));
@@ -111,6 +118,33 @@ class ProjectPortalServiceTest {
                 eq(List.of(TASK_ID.toString())),
                 eq(List.of(INVOICE_ID.toString()))
         )).thenReturn(List.of(projectComment, taskComment, invoiceComment));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + projectAttachmentId,
+                CommentTargetType.PROJECT,
+                PROJECT_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        projectAttachmentId, CommentTargetType.PROJECT, PROJECT_ID.toString(), "project-brief.pdf")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + taskAttachmentId,
+                CommentTargetType.TASK,
+                TASK_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        taskAttachmentId, CommentTargetType.TASK, TASK_ID.toString(), "task screenshot.png")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/api/attachments/" + invoiceAttachmentId,
+                CommentTargetType.INVOICE,
+                INVOICE_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.of(createAttachment(
+                        invoiceAttachmentId, CommentTargetType.INVOICE, INVOICE_ID.toString(), "invoice-note.txt")));
+        when(attachmentService.findAuthorizedProtectedReference(
+                "/uploads/attachments/legacy.txt",
+                CommentTargetType.INVOICE,
+                INVOICE_ID.toString(),
+                OWNER_ID))
+                .thenReturn(Optional.empty());
 
         List<ProjectFileResponse> files = projectPortalService.getProjectFiles(PROJECT_ID, OWNER_ID, Role.CLIENT);
 
@@ -267,5 +301,21 @@ class ProjectPortalServiceTest {
                 .role(role)
                 .active(true)
                 .build();
+    }
+
+    private Attachment createAttachment(UUID id,
+                                        CommentTargetType targetType,
+                                        String targetId,
+                                        String originalFilename) {
+        Attachment attachment = new Attachment();
+        attachment.setId(id);
+        attachment.setTenantId(TENANT_ID);
+        attachment.setTargetType(targetType);
+        attachment.setTargetId(targetId);
+        attachment.setOriginalFilename(originalFilename);
+        attachment.setStorageKey(UUID.randomUUID().toString());
+        attachment.setMediaType("application/pdf");
+        attachment.setSizeBytes(100);
+        return attachment;
     }
 }
