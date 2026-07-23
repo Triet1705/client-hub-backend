@@ -2,6 +2,7 @@ package com.clienthub.domain.repository;
 
 import com.clienthub.domain.entity.Task;
 import com.clienthub.domain.enums.TaskStatus;
+import com.clienthub.domain.enums.TaskPriority;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -57,6 +58,71 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     List<Task> findAllByTenantIdWithRelations(@Param("tenantId") String tenantId);
 
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<TaskStatus> statuses);
+
+    @Query("""
+            SELECT t FROM Task t
+            WHERE t.tenantId = :tenantId
+              AND (:projectId IS NULL OR t.project.id = :projectId)
+              AND (:status IS NULL OR t.status = :status)
+              AND (:priority IS NULL OR t.priority = :priority)
+              AND (:assignedToId IS NULL OR t.assignedTo.id = :assignedToId)
+            """)
+    Page<Task> findVisibleToAdministrator(
+            @Param("tenantId") String tenantId,
+            @Param("projectId") UUID projectId,
+            @Param("status") TaskStatus status,
+            @Param("priority") TaskPriority priority,
+            @Param("assignedToId") UUID assignedToId,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT t FROM Task t
+            WHERE t.tenantId = :tenantId
+              AND t.project.owner.id = :clientId
+              AND (:projectId IS NULL OR t.project.id = :projectId)
+              AND (:status IS NULL OR t.status = :status)
+              AND (:priority IS NULL OR t.priority = :priority)
+              AND (:assignedToId IS NULL OR t.assignedTo.id = :assignedToId)
+            """)
+    Page<Task> findVisibleToClient(
+            @Param("tenantId") String tenantId,
+            @Param("clientId") UUID clientId,
+            @Param("projectId") UUID projectId,
+            @Param("status") TaskStatus status,
+            @Param("priority") TaskPriority priority,
+            @Param("assignedToId") UUID assignedToId,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT t FROM Task t
+            WHERE t.tenantId = :tenantId
+              AND t.assignedTo.id = :freelancerId
+              AND (:projectId IS NULL OR t.project.id = :projectId)
+              AND (:status IS NULL OR t.status = :status)
+              AND (:priority IS NULL OR t.priority = :priority)
+            """)
+    Page<Task> findVisibleToFreelancer(
+            @Param("tenantId") String tenantId,
+            @Param("freelancerId") UUID freelancerId,
+            @Param("projectId") UUID projectId,
+            @Param("status") TaskStatus status,
+            @Param("priority") TaskPriority priority,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT COUNT(t) FROM Task t
+            WHERE t.tenantId = :tenantId
+              AND t.project.owner.id = :clientId
+              AND t.status IN :statuses
+            """)
+    long countByProjectOwnerIdAndTenantIdAndStatusIn(
+            @Param("clientId") UUID clientId,
+            @Param("tenantId") String tenantId,
+            @Param("statuses") List<TaskStatus> statuses
+    );
 
     @Query("SELECT COUNT(t) FROM Task t WHERE t.project.id = :projectId AND t.tenantId = :tenantId")
     long countByProjectIdAndTenantId(@Param("projectId") UUID projectId, @Param("tenantId") String tenantId);

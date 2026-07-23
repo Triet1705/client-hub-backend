@@ -1,14 +1,6 @@
 package com.clienthub.application.service;
 
-import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.application.aop.LogAudit;
-import com.clienthub.domain.entity.Project;
-import com.clienthub.domain.entity.Task;
-import com.clienthub.domain.entity.User;
-import com.clienthub.domain.enums.AuditAction;
-import com.clienthub.domain.enums.Role;
-import com.clienthub.domain.enums.TaskPriority;
-import com.clienthub.domain.enums.TaskStatus;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
 import com.clienthub.application.dto.task.TaskSummaryResponse;
@@ -16,16 +8,22 @@ import com.clienthub.application.exception.InvalidTaskStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
 import com.clienthub.application.mapper.TaskMapper;
+import com.clienthub.application.validation.TaskStatusTransition;
+import com.clienthub.common.service.TenantAwareService;
+import com.clienthub.domain.entity.Project;
+import com.clienthub.domain.entity.Task;
+import com.clienthub.domain.entity.User;
+import com.clienthub.domain.enums.AuditAction;
+import com.clienthub.domain.enums.Role;
+import com.clienthub.domain.enums.TaskPriority;
+import com.clienthub.domain.enums.TaskStatus;
+import com.clienthub.domain.repository.ProjectMemberRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.TaskRepository;
 import com.clienthub.domain.repository.UserRepository;
-import com.clienthub.application.validation.TaskStatusTransition;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
-
-import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,110 +35,111 @@ public class TaskService extends TenantAwareService {
 
     private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
     private final TaskMapper taskMapper;
     private final NotificationProducerService notificationProducerService;
 
     public TaskService(TaskRepository taskRepository,
                        ProjectRepository projectRepository,
+                       ProjectMemberRepository projectMemberRepository,
                        UserRepository userRepository,
                        TaskMapper taskMapper,
                        NotificationProducerService notificationProducerService) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.taskMapper = taskMapper;
         this.notificationProducerService = notificationProducerService;
     }
 
-    private void validateUserTenant(User user, String expectedTenantId) {
-        if (!expectedTenantId.equals(user.getTenantId())) {
-            throw new AccessDeniedException("Cannot assign users from different tenants");
-        }
-    }
-
-    private void validateProjectTenant(Project project, String expectedTenantId) {
-        if (!expectedTenantId.equals(project.getTenantId())) {
-            throw new AccessDeniedException("Cannot create tasks in projects from different tenants");
-        }
-    }
-
     @LogAudit(action = AuditAction.CREATE, entityType = "TASK", entityId = "#result.id")
-    public TaskResponse createTask(TaskRequest request) {
+    public TaskResponse createTask(TaskRequest request, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-
-        Project project = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
-
-        validateProjectTenant(project, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        Project project = loadProject(request.getProjectId(), tenantId);
+        boolean isMemberFreelancer = isExplicitFreelancerMember(project.getId(), actor, tenantId);
+        TaskAccessPolicy.requireProjectCreateAccess(project, actor, isMemberFreelancer);
 
         Task task = taskMapper.toEntity(request);
         task.setProject(project);
         task.setTenantId(tenantId);
 
         if (request.getAssignedToId() != null) {
-            User assignee = userRepository.findByIdAndTenantId(request.getAssignedToId(), tenantId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
-
-            validateUserTenant(assignee, tenantId);
+            User assignee = loadEligibleAssignee(request.getAssignedToId(), project.getId(), tenantId);
+            if (actor.getRole() == Role.FREELANCER && !actor.getId().equals(assignee.getId())) {
+                throw new AccessDeniedException("Freelancers may only create tasks assigned to themselves");
+            }
             task.setAssignedTo(assignee);
+        } else if (actor.getRole() == Role.FREELANCER) {
+            throw new AccessDeniedException("Freelancers must assign created tasks to themselves");
         }
 
         Task savedTask = taskRepository.save(task);
-        // Removed manual audit logger
         return taskMapper.toResponse(savedTask);
     }
 
     @Transactional(readOnly = true)
-    public Page<TaskResponse> getTasks(UUID projectId, TaskStatus status, TaskPriority priority, UUID assignedToId,
-                                       UUID currentUserId, Role currentUserRole, Pageable pageable) {
+    public Page<TaskResponse> getTasks(UUID projectId,
+                                       TaskStatus status,
+                                       TaskPriority priority,
+                                       UUID assignedToId,
+                                       UUID currentUserId,
+                                       Pageable pageable) {
         String tenantId = getCurrentTenantId();
-
-        final UUID effectiveAssigneeId = (currentUserRole == Role.FREELANCER) ? currentUserId : assignedToId;
-
-        Specification<Task> spec = Specification.where((root, query, cb) -> cb.equal(root.get("tenantId"), tenantId));
-
-        if (projectId != null) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("project").get("id"), projectId));
-        }
-        if (status != null) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
-        }
-        if (priority != null) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("priority"), priority));
-        }
-        if (effectiveAssigneeId != null) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("assignedTo").get("id"), effectiveAssigneeId));
-        }
-
-        Page<Task> tasks = taskRepository.findAll(spec, pageable);
-
+        User actor = loadActor(currentUserId, tenantId);
+        Page<Task> tasks = switch (actor.getRole()) {
+            case CLIENT -> taskRepository.findVisibleToClient(
+                    tenantId, actor.getId(), projectId, status, priority, assignedToId, pageable);
+            case FREELANCER -> taskRepository.findVisibleToFreelancer(
+                    tenantId, actor.getId(), projectId, status, priority, pageable);
+            case ADMIN -> taskRepository.findVisibleToAdministrator(
+                    tenantId, projectId, status, priority, assignedToId, pageable);
+        };
         return tasks.map(taskMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
-    public TaskResponse getTaskById(UUID taskId) {
+    public TaskResponse getTaskById(UUID taskId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireReadOrUpdateAccess(task, actor);
         return taskMapper.toResponse(task);
     }
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
     public TaskResponse updateTask(UUID taskId, TaskRequest request, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireReadOrUpdateAccess(task, actor);
 
-        User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", currentUserId));
+        Project effectiveProject = task.getProject();
+        boolean movingProject = request.getProjectId() != null
+                && !effectiveProject.getId().equals(request.getProjectId());
+        if (movingProject) {
+            if (actor.getRole() == Role.FREELANCER) {
+                throw new AccessDeniedException("Freelancers cannot move tasks between projects");
+            }
+            effectiveProject = loadProject(request.getProjectId(), tenantId);
+            TaskAccessPolicy.requireProjectCreateAccess(effectiveProject, actor, false);
+        }
 
-        boolean isProjectOwner = task.getProject().getOwner().getId().equals(currentUserId);
-        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUserId);
-        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
-
-        if (!isProjectOwner && !isAssignee && !isAdmin) {
-            throw new AccessDeniedException("Only Project Owner or Assignee can update this task.");
+        User effectiveAssignee = task.getAssignedTo();
+        boolean changingAssignee = request.getAssignedToId() != null
+                && (effectiveAssignee == null
+                || !effectiveAssignee.getId().equals(request.getAssignedToId()));
+        if (changingAssignee && actor.getRole() == Role.FREELANCER) {
+            throw new AccessDeniedException("Freelancers cannot reassign tasks");
+        }
+        if (request.getAssignedToId() != null) {
+            effectiveAssignee = loadEligibleAssignee(
+                    request.getAssignedToId(), effectiveProject.getId(), tenantId);
+        } else if (movingProject && effectiveAssignee != null) {
+            effectiveAssignee = loadEligibleAssignee(
+                    effectiveAssignee.getId(), effectiveProject.getId(), tenantId);
         }
 
         if (request.getStatus() != null && task.getStatus() != request.getStatus()) {
@@ -148,94 +147,59 @@ public class TaskService extends TenantAwareService {
         }
 
         taskMapper.updateEntityFromRequest(request, task);
-
-        if (request.getProjectId() != null && !task.getProject().getId().equals(request.getProjectId())) {
-            Project newProject = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
-            validateProjectTenant(newProject, tenantId);
-            task.setProject(newProject);
-        }
-
-        if (request.getAssignedToId() != null) {
-            if (task.getAssignedTo() == null || !task.getAssignedTo().getId().equals(request.getAssignedToId())) {
-                User newAssignee = userRepository.findByIdAndTenantId(request.getAssignedToId(), tenantId)
-                        .orElseThrow(() -> new ResourceNotFoundException("User", "id", request.getAssignedToId()));
-                validateUserTenant(newAssignee, tenantId);
-                task.setAssignedTo(newAssignee);
-            }
-        }
+        task.setProject(effectiveProject);
+        task.setAssignedTo(effectiveAssignee);
 
         Task updatedTask = taskRepository.save(task);
         return taskMapper.toResponse(updatedTask);
     }
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
-    public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus, UUID currentUserId, Role currentUserRole) {
+    public TaskResponse updateTaskStatus(UUID taskId, TaskStatus newStatus, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
-
-        boolean isProjectOwner = task.getProject().getOwner().getId().equals(currentUserId);
-        boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUserId);
-        boolean isAdmin = currentUserRole == Role.ADMIN;
-
-        if (!isProjectOwner && !isAssignee && !isAdmin) {
-            throw new AccessDeniedException("Only Project Owner, Assignee, or Admin can update this task status.");
-        }
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireReadOrUpdateAccess(task, actor);
 
         TaskStatus oldStatus = task.getStatus();
-
         validateStatusTransition(task, newStatus);
         task.setStatus(newStatus);
 
         Task updatedTask = taskRepository.save(task);
-
         if (oldStatus != TaskStatus.DONE && newStatus == TaskStatus.DONE) {
             notificationProducerService.notifyTaskCompleted(updatedTask);
         }
-
         return taskMapper.toResponse(updatedTask);
     }
 
-    private void validateStatusTransition(Task task, TaskStatus newStatus) {
-        if (!TaskStatusTransition.isTransitionAllowed(task.getStatus(), newStatus)) {
-            throw new InvalidTaskStateException(task.getId(), task.getStatus(), newStatus);
-        }
-    }
-
     @Transactional(readOnly = true)
-    public TaskSummaryResponse getTaskSummary(UUID currentUserId, Role currentUserRole) {
+    public TaskSummaryResponse getTaskSummary(UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        if (currentUserRole == Role.FREELANCER) {
-            long todo       = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.TODO));
-            long inProgress = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.IN_PROGRESS));
-            long done       = taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(currentUserId, tenantId, List.of(TaskStatus.DONE));
-            return new TaskSummaryResponse(todo, inProgress, done);
-        }
-        long todo       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.TODO));
-        long inProgress = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.IN_PROGRESS));
-        long done       = taskRepository.countByTenantIdAndStatusIn(tenantId, List.of(TaskStatus.DONE));
+        User actor = loadActor(currentUserId, tenantId);
+        long todo = countVisibleByStatuses(actor, tenantId, TaskStatus.TODO);
+        long inProgress = countVisibleByStatuses(actor, tenantId, TaskStatus.IN_PROGRESS);
+        long done = countVisibleByStatuses(actor, tenantId, TaskStatus.DONE);
         return new TaskSummaryResponse(todo, inProgress, done);
     }
 
     @LogAudit(action = AuditAction.DELETE, entityType = "TASK", entityId = "#taskId")
-    public void deleteTask(UUID taskId) {
+    public void deleteTask(UUID taskId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireOwnerOrAdmin(
+                task, actor, "Only the project owner or Administrator can delete this task");
         taskRepository.delete(task);
     }
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
-    public TaskResponse assignTask(UUID taskId, UUID userId) {
+    public TaskResponse assignTask(UUID taskId, UUID userId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
-
-        User assignee = userRepository.findByIdAndTenantId(userId, tenantId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-
-        validateUserTenant(assignee, tenantId);
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireOwnerOrAdmin(
+                task, actor, "Only the project owner or Administrator can assign this task");
+        User assignee = loadEligibleAssignee(userId, task.getProject().getId(), tenantId);
 
         task.setAssignedTo(assignee);
         Task updatedTask = taskRepository.save(task);
@@ -243,13 +207,65 @@ public class TaskService extends TenantAwareService {
     }
 
     @LogAudit(action = AuditAction.UPDATE, entityType = "TASK", entityId = "#taskId")
-    public TaskResponse unassignTask(UUID taskId) {
+    public TaskResponse unassignTask(UUID taskId, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
-        Task task = taskRepository.findByIdAndTenantId(taskId, tenantId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+        Task task = loadTask(taskId, tenantId);
+        User actor = loadActor(currentUserId, tenantId);
+        TaskAccessPolicy.requireUnassignAccess(task, actor);
 
         task.setAssignedTo(null);
         Task updatedTask = taskRepository.save(task);
         return taskMapper.toResponse(updatedTask);
+    }
+
+    private User loadActor(UUID currentUserId, String tenantId) {
+        return userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", currentUserId));
+    }
+
+    private Project loadProject(UUID projectId, String tenantId) {
+        return projectRepository.findByIdAndTenantId(projectId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
+    }
+
+    private Task loadTask(UUID taskId, String tenantId) {
+        return taskRepository.findByIdAndTenantId(taskId, tenantId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId, tenantId));
+    }
+
+    private User loadEligibleAssignee(UUID userId, UUID projectId, String tenantId) {
+        User assignee = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        if (assignee.getRole() != Role.FREELANCER || !assignee.isActive()) {
+            throw new AccessDeniedException("Task assignee must be an active Freelancer");
+        }
+        if (!projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                projectId, userId, tenantId)) {
+            throw new AccessDeniedException("Task assignee must be a member of the project");
+        }
+        return assignee;
+    }
+
+    private boolean isExplicitFreelancerMember(UUID projectId, User actor, String tenantId) {
+        return actor.getRole() == Role.FREELANCER
+                && projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                projectId, actor.getId(), tenantId);
+    }
+
+    private long countVisibleByStatuses(User actor, String tenantId, TaskStatus status) {
+        return switch (actor.getRole()) {
+            case CLIENT -> taskRepository.countByProjectOwnerIdAndTenantIdAndStatusIn(
+                    actor.getId(), tenantId, java.util.List.of(status));
+            case FREELANCER -> taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(
+                    actor.getId(), tenantId, java.util.List.of(status));
+            case ADMIN -> taskRepository.countByTenantIdAndStatusIn(
+                    tenantId, java.util.List.of(status));
+        };
+    }
+
+    private void validateStatusTransition(Task task, TaskStatus newStatus) {
+        if (!TaskStatusTransition.isTransitionAllowed(task.getStatus(), newStatus)) {
+            throw new InvalidTaskStateException(task.getId(), task.getStatus(), newStatus);
+        }
     }
 }
