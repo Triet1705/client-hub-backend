@@ -34,6 +34,7 @@ import java.util.UUID;
 public class ProjectService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(ProjectService.class);
+    private static final int FREELANCER_SEARCH_LIMIT = 20;
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
@@ -271,41 +272,38 @@ public class ProjectService extends TenantAwareService {
                 .toList();
     }
 
-            @Transactional(readOnly = true)
-            public List<ProjectFreelancerSearchResponse> searchAvailableFreelancers(
-                UUID projectId,
-                String keyword,
-                UUID currentUserId,
-                boolean isAdmin
-            ) {
-            String tenantId = getCurrentTenantId();
+    @Transactional(readOnly = true)
+    public List<ProjectFreelancerSearchResponse> searchAvailableFreelancers(
+            UUID projectId,
+            String keyword,
+            UUID currentUserId,
+            boolean isAdmin
+    ) {
+        String tenantId = getCurrentTenantId();
 
-            Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
+        Project project = projectRepository.findByIdAndTenantId(projectId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
-            validateProjectOwnerAccess(project, currentUserId, isAdmin);
+        validateProjectOwnerAccess(project, currentUserId, isAdmin);
 
-            String normalizedKeyword = keyword == null ? null : keyword.trim();
-            if (normalizedKeyword != null && normalizedKeyword.isBlank()) {
-                normalizedKeyword = null;
-            }
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        Pageable searchPage = PageRequest.of(0, FREELANCER_SEARCH_LIMIT);
 
-            Page<User> candidates = userRepository.searchActiveUsersByTenantIdAndRoleAndKeyword(
-                tenantId,
-                Role.FREELANCER,
-                normalizedKeyword,
-                PageRequest.of(0, 20)
-            );
+        Page<User> candidates = normalizedKeyword.isEmpty()
+                ? userRepository.findActiveUsersByTenantIdAndRole(
+                        tenantId, Role.FREELANCER, searchPage)
+                : userRepository.searchActiveUsersByTenantIdAndRoleAndKeyword(
+                        tenantId, Role.FREELANCER, normalizedKeyword, searchPage);
 
-            Set<UUID> existingMemberIds = projectMemberRepository.findByIdProjectIdAndTenantId(projectId, tenantId)
+        Set<UUID> existingMemberIds = projectMemberRepository.findByIdProjectIdAndTenantId(projectId, tenantId)
                 .stream()
                 .map(member -> member.getUser().getId())
                 .collect(java.util.stream.Collectors.toSet());
 
-            return candidates.getContent().stream()
+        return candidates.getContent().stream()
                 .filter(user -> !existingMemberIds.contains(user.getId()))
                 .map(this::toFreelancerSearchResponse)
                 .toList();
-            }
+    }
 
     private void validateProjectOwnerAccess(Project project, UUID currentUserId, boolean isAdmin) {
         if (!isAdmin && !project.getOwner().getId().equals(currentUserId)) {

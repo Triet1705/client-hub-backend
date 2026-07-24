@@ -7,6 +7,7 @@ import com.clienthub.domain.enums.ProjectStatus;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.application.dto.project.ProjectRequest;
 import com.clienthub.application.dto.project.ProjectResponse;
+import com.clienthub.application.dto.project.ProjectFreelancerSearchResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.mapper.ProjectMapper;
 import com.clienthub.domain.repository.ProjectMemberRepository;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -452,6 +454,147 @@ class ProjectServiceTest {
     }
 
     @Test
+    @DisplayName("DEFECT-MEM-01: Administrator search without keyword uses the non-keyword query")
+    void searchAvailableFreelancers_AdminOmittedKeyword_ShouldUseBoundedQuery() {
+        UUID adminId = UUID.randomUUID();
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        User freelancer = createSearchableFreelancer("available@example.com", "Available Freelancer");
+
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findActiveUsersByTenantIdAndRole(
+                TENANT_ID, Role.FREELANCER, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(freelancer)));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        List<ProjectFreelancerSearchResponse> result =
+                projectService.searchAvailableFreelancers(PROJECT_ID, null, adminId, true);
+
+        assertEquals(1, result.size());
+        assertEquals(freelancer.getId(), result.get(0).getUserId());
+        verify(userRepository, never()).searchActiveUsersByTenantIdAndRoleAndKeyword(
+                anyString(), any(), anyString(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("DEFECT-MEM-01: Owning Client search without keyword remains authorised")
+    void searchAvailableFreelancers_OwnerOmittedKeyword_ShouldAllow() {
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findActiveUsersByTenantIdAndRole(
+                TENANT_ID, Role.FREELANCER, PageRequest.of(0, 20)))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        assertTrue(projectService.searchAvailableFreelancers(
+                PROJECT_ID, null, USER_ID, false).isEmpty());
+    }
+
+    @Test
+    @DisplayName("DEFECT-MEM-01: Blank keyword is explicitly treated as omitted")
+    void searchAvailableFreelancers_BlankKeyword_ShouldUseNonKeywordQuery() {
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findActiveUsersByTenantIdAndRole(
+                TENANT_ID, Role.FREELANCER, PageRequest.of(0, 20)))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        assertTrue(projectService.searchAvailableFreelancers(
+                PROJECT_ID, "   ", USER_ID, false).isEmpty());
+        verify(userRepository, never()).searchActiveUsersByTenantIdAndRoleAndKeyword(
+                anyString(), any(), anyString(), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("FR04: Keyword search trims input and retains database case-insensitive matching")
+    void searchAvailableFreelancers_Keyword_ShouldUseTrimmedKeywordQuery() {
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        User freelancer = createSearchableFreelancer("alice@example.com", "Alice Example");
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.searchActiveUsersByTenantIdAndRoleAndKeyword(
+                TENANT_ID, Role.FREELANCER, "ALiCe", PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(freelancer)));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        List<ProjectFreelancerSearchResponse> result =
+                projectService.searchAvailableFreelancers(PROJECT_ID, "  ALiCe  ", USER_ID, false);
+
+        assertEquals(List.of("alice@example.com"),
+                result.stream().map(ProjectFreelancerSearchResponse::getEmail).toList());
+    }
+
+    @Test
+    @DisplayName("FR04: No matching eligible Freelancer returns an empty result")
+    void searchAvailableFreelancers_NoMatch_ShouldReturnEmpty() {
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.searchActiveUsersByTenantIdAndRoleAndKeyword(
+                TENANT_ID, Role.FREELANCER, "missing", PageRequest.of(0, 20)))
+                .thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        assertTrue(projectService.searchAvailableFreelancers(
+                PROJECT_ID, "missing", USER_ID, false).isEmpty());
+    }
+
+    @Test
+    @DisplayName("FR04: Same-tenant non-owner Client cannot search project Freelancers")
+    void searchAvailableFreelancers_SameTenantOutsider_ShouldBeDenied() {
+        UUID outsiderId = UUID.randomUUID();
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+
+        assertThrows(AccessDeniedException.class, () ->
+                projectService.searchAvailableFreelancers(PROJECT_ID, null, outsiderId, false));
+        verifyNoInteractions(userRepository, projectMemberRepository);
+    }
+
+    @Test
+    @DisplayName("FR04: Cross-tenant project search remains non-disclosing")
+    void searchAvailableFreelancers_CrossTenantProject_ShouldBeNotFound() {
+        String otherTenant = "other-tenant";
+        TenantContext.setTenantId(otherTenant);
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, otherTenant))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                projectService.searchAvailableFreelancers(PROJECT_ID, null, USER_ID, false));
+        verifyNoInteractions(userRepository, projectMemberRepository);
+    }
+
+    @Test
+    @DisplayName("FR04: Freelancer search preserves the existing 20-result database bound")
+    void searchAvailableFreelancers_ShouldEnforceTwentyResultLimit() {
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findActiveUsersByTenantIdAndRole(
+                eq(TENANT_ID), eq(Role.FREELANCER), any(Pageable.class)))
+                .thenReturn(Page.empty());
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of());
+
+        projectService.searchAvailableFreelancers(PROJECT_ID, null, USER_ID, false);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(userRepository).findActiveUsersByTenantIdAndRole(
+                eq(TENANT_ID), eq(Role.FREELANCER), pageableCaptor.capture());
+        assertEquals(0, pageableCaptor.getValue().getPageNumber());
+        assertEquals(20, pageableCaptor.getValue().getPageSize());
+    }
+
+    @Test
     @DisplayName("Security: Should prevent creating project for user in different tenant")
     void createProject_CrossTenantUser_ShouldThrowException() {
         User crossTenantUser = createUser(USER_ID, "OTHER_TENANT");
@@ -526,5 +669,13 @@ class ProjectServiceTest {
         project.setOwner(owner);
         project.setTenantId(TENANT_ID);
         return project;
+    }
+
+    private User createSearchableFreelancer(String email, String fullName) {
+        User user = createUser(UUID.randomUUID(), TENANT_ID, Role.FREELANCER);
+        user.setEmail(email);
+        user.setFullName(fullName);
+        user.setActive(true);
+        return user;
     }
 }
