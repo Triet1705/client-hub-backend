@@ -60,8 +60,8 @@ public class AdminController {
     // ─── Users ────────────────────────────────────────────────────────────────
 
     @GetMapping("/users")
-    @Operation(summary = "List all users platform-wide",
-               description = "Paginated list of all users, filterable by role and active status")
+    @Operation(summary = "List users in the Administrator tenant",
+               description = "Tenant-scoped paginated users, filterable by role and active status")
     public ResponseEntity<Page<AdminUserResponse>> listUsers(
             @RequestParam(required = false) Role role,
             @RequestParam(required = false) Boolean active,
@@ -74,13 +74,14 @@ public class AdminController {
     }
 
     @GetMapping("/users/{id}")
-    @Operation(summary = "Get single user detail", description = "Includes project count and invoice count")
+    @Operation(summary = "Get tenant-scoped user detail",
+               description = "Returns detail only when the target belongs to the Administrator tenant")
     public ResponseEntity<AdminUserDetailResponse> getUserDetail(@PathVariable UUID id) {
         return ResponseEntity.ok(adminService.getUserDetail(id));
     }
 
     @PatchMapping("/users/{id}/status")
-    @Operation(summary = "Activate or Deactivate user")
+    @Operation(summary = "Activate or deactivate a user in the Administrator tenant")
     public ResponseEntity<Void> updateUserStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UserStatusRequest request) {
@@ -89,7 +90,7 @@ public class AdminController {
     }
 
     @PatchMapping("/users/{id}/role")
-    @Operation(summary = "Change user role")
+    @Operation(summary = "Change a user role in the Administrator tenant")
     public ResponseEntity<Void> updateUserRole(
             @PathVariable UUID id,
             @Valid @RequestBody UserRoleRequest request) {
@@ -252,7 +253,7 @@ public class AdminController {
 
     @PostMapping("/impersonate/{userId}")
     @Operation(summary = "Generate impersonation token for target user",
-               description = "SECURITY NOTICE: Logs impersonation event. Returns JWT containing impersonator_id claim.")
+               description = "Tenant-scoped operation. Logs impersonation and returns a JWT containing impersonator_id.")
     public ResponseEntity<ImpersonationResponse> impersonate(
             @PathVariable UUID userId,
             @AuthenticationPrincipal CustomUserDetails admin) {
