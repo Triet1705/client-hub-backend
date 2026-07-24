@@ -454,6 +454,47 @@ class ProjectServiceTest {
     }
 
     @Test
+    @DisplayName("MEM-03: Cross-tenant membership target is non-disclosing")
+    void addMember_CrossTenantTarget_ShouldBeNotFound() {
+        UUID foreignUserId = UUID.randomUUID();
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findByIdAndTenantId(foreignUserId, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> projectService.addMember(
+                        PROJECT_ID, foreignUserId, USER_ID, false));
+
+        verify(userRepository, never()).findById(foreignUserId);
+        verify(projectMemberRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("FR04: Owner can still add an eligible same-tenant Freelancer")
+    void addMember_OwnerAndEligibleFreelancer_ShouldSucceed() {
+        UUID freelancerId = UUID.randomUUID();
+        Project project = createProject(createUser(USER_ID, TENANT_ID, Role.CLIENT));
+        User freelancer = createUser(freelancerId, TENANT_ID, Role.FREELANCER);
+        freelancer.setEmail("member@example.com");
+        freelancer.setFullName("Member Freelancer");
+        when(projectRepository.findByIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findByIdAndTenantId(freelancerId, TENANT_ID))
+                .thenReturn(Optional.of(freelancer));
+        when(projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                PROJECT_ID, freelancerId, TENANT_ID)).thenReturn(false);
+        when(projectMemberRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = projectService.addMember(PROJECT_ID, freelancerId, USER_ID, false);
+
+        assertEquals(freelancerId, response.getUserId());
+        verify(projectMemberRepository).save(any());
+    }
+
+    @Test
     @DisplayName("DEFECT-MEM-01: Administrator search without keyword uses the non-keyword query")
     void searchAvailableFreelancers_AdminOmittedKeyword_ShouldUseBoundedQuery() {
         UUID adminId = UUID.randomUUID();

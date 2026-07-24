@@ -205,10 +205,9 @@ public class ProjectService extends TenantAwareService {
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", projectId));
         validateProjectOwnerAccess(project, currentUserId, isAdmin);
 
-        User memberUser = userRepository.findById(memberUserId)
+        User memberUser = userRepository.findByIdAndTenantId(memberUserId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", memberUserId));
 
-        validateUserTenant(memberUser, tenantId);
         if (memberUser.getRole() != Role.FREELANCER) {
             throw new AccessDeniedException("Only FREELANCER users can be added as project members");
         }

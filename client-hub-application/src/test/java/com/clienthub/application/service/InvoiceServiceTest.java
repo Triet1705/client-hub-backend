@@ -2,6 +2,7 @@ package com.clienthub.application.service;
 
 import com.clienthub.application.mapper.InvoiceMapper;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
+import com.clienthub.application.exception.InvalidInvoiceStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.Invoice;
@@ -98,10 +99,26 @@ class InvoiceServiceTest {
         when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID)).thenReturn(Optional.of(invoice));
         when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID)).thenReturn(Optional.of(client));
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
+        InvalidInvoiceStateException exception = assertThrows(InvalidInvoiceStateException.class,
                 () -> invoiceService.updateStatus(INVOICE_ID, targetStatus, CLIENT_ID));
 
         assertEquals("Crypto escrow invoice status is managed by blockchain events", exception.getMessage());
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void updateStatus_WhenConventionalTransitionIsInvalid_ShouldRaiseControlledDomainException() {
+        Invoice invoice = createProjectInvoice();
+        when(invoiceRepository.findByIdAndTenantId(INVOICE_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(invoice.getClient()));
+
+        InvalidInvoiceStateException exception = assertThrows(
+                InvalidInvoiceStateException.class,
+                () -> invoiceService.updateStatus(INVOICE_ID, InvoiceStatus.PAID, CLIENT_ID));
+
+        assertEquals("Invalid state transition from DRAFT to PAID", exception.getMessage());
         verify(invoiceRepository, never()).save(any(Invoice.class));
     }
 
