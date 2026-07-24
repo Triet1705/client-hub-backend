@@ -15,6 +15,8 @@ import com.clienthub.application.dto.admin.ImpersonationResponse;
 import com.clienthub.application.dto.admin.JvmVitals;
 import com.clienthub.application.dto.admin.OperationalAlert;
 import com.clienthub.application.dto.analytics.AdminDashboardResponse;
+import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.AuditLog;
 import com.clienthub.domain.entity.AuditAnchorMember;
 import com.clienthub.domain.entity.Invoice;
@@ -55,7 +57,7 @@ import org.springframework.web.client.RestTemplate;
 
 @Service
 @Transactional(readOnly = true)
-public class AdminService {
+public class AdminService extends TenantAwareService {
 
     private static final Logger logger = LoggerFactory.getLogger(AdminService.class);
     private static final List<ProjectStatus> CLOSED_PROJECT_STATUSES =
@@ -141,7 +143,9 @@ public class AdminService {
     }
 
     public Page<AdminUserResponse> listUsers(Role role, Boolean active, String keyword, Pageable pageable) {
-        Specification<User> spec = Specification.where(null);
+        String tenantId = getCurrentTenantId();
+        Specification<User> spec =
+                (root, query, cb) -> cb.equal(root.get("tenantId"), tenantId);
 
         if (role != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("role"), role));
@@ -161,24 +165,19 @@ public class AdminService {
     }
 
     public AdminUserDetailResponse getUserDetail(UUID userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-
-        return AdminUserDetailResponse.from(user, 0L, 0L);
+        return AdminUserDetailResponse.from(resolveTargetUser(userId), 0L, 0L);
     }
 
     @Transactional
     public void updateUserStatus(UUID userId, boolean active) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        User user = resolveTargetUser(userId);
         user.setActive(active);
         userRepository.save(user);
     }
 
     @Transactional
     public void updateUserRole(UUID userId, Role role) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        User user = resolveTargetUser(userId);
 
         if (user.getRole() == Role.ADMIN) {
             throw new org.springframework.security.access.AccessDeniedException("Cannot change role of an ADMIN user.");
@@ -241,8 +240,7 @@ public class AdminService {
     }
 
     public ImpersonationResponse impersonate(UUID targetUserId, UUID adminId) {
-        User targetUser = userRepository.findById(targetUserId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + targetUserId));
+        User targetUser = resolveTargetUser(targetUserId);
 
         if (targetUser.getRole() == Role.ADMIN) {
             throw new org.springframework.security.access.AccessDeniedException("Cannot impersonate another ADMIN user.");
@@ -264,6 +262,11 @@ public class AdminService {
                 targetUser.getTenantId(),
                 true
         );
+    }
+
+    private User resolveTargetUser(UUID userId) {
+        return userRepository.findByIdAndTenantId(userId, getCurrentTenantId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     public Page<AdminAuditLogResponse> listRecentActivity(Pageable pageable) {

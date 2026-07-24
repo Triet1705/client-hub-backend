@@ -3,8 +3,12 @@ package com.clienthub.application.service;
 import com.clienthub.application.dto.admin.AdminEventItem;
 import com.clienthub.application.dto.admin.AdminFeatureFlag;
 import com.clienthub.application.dto.admin.AdminControlCenterResponse;
+import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.AuditLog;
+import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.AuditAction;
+import com.clienthub.domain.enums.Role;
 import com.clienthub.domain.repository.AuditLogRepository;
 import com.clienthub.domain.repository.AuditAnchorMemberRepository;
 import com.clienthub.domain.repository.InvoiceRepository;
@@ -14,6 +18,9 @@ import com.clienthub.infrastructure.security.JwtTokenProvider;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,15 +39,21 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AdminServiceTest {
+
+    private static final String TENANT_ID = "tenant-admin-a";
 
     @Mock
     private UserRepository userRepository;
@@ -73,6 +86,7 @@ class AdminServiceTest {
 
     @BeforeEach
     void setUp() {
+        TenantContext.setTenantId(TENANT_ID);
         adminService = new AdminService(
                 userRepository,
                 projectRepository,
@@ -83,6 +97,81 @@ class AdminServiceTest {
                 jdbcTemplate,
                 redisTemplate,
                 new RestTemplateBuilder());
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
+    @Test
+    @DisplayName("Administrator user detail uses a tenant-qualified target lookup")
+    void getUserDetail_ShouldResolveTargetWithinCurrentTenant() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId, Role.CLIENT);
+        when(userRepository.findByIdAndTenantId(userId, TENANT_ID))
+                .thenReturn(Optional.of(user));
+
+        var response = adminService.getUserDetail(userId);
+
+        assertEquals(userId, response.id());
+        assertEquals(TENANT_ID, response.tenantId());
+        verify(userRepository, never()).findById(userId);
+    }
+
+    @Test
+    @DisplayName("Missing and cross-tenant targets share a non-disclosing not-found exception")
+    void targetUserOperations_ShouldRejectUnqualifiedTargets() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findByIdAndTenantId(userId, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        ResourceNotFoundException detail = assertThrows(
+                ResourceNotFoundException.class,
+                () -> adminService.getUserDetail(userId));
+        ResourceNotFoundException status = assertThrows(
+                ResourceNotFoundException.class,
+                () -> adminService.updateUserStatus(userId, false));
+        ResourceNotFoundException role = assertThrows(
+                ResourceNotFoundException.class,
+                () -> adminService.updateUserRole(userId, Role.FREELANCER));
+        ResourceNotFoundException impersonation = assertThrows(
+                ResourceNotFoundException.class,
+                () -> adminService.impersonate(userId, UUID.randomUUID()));
+
+        assertEquals("User not found", detail.getMessage());
+        assertEquals(detail.getMessage(), status.getMessage());
+        assertEquals(detail.getMessage(), role.getMessage());
+        assertEquals(detail.getMessage(), impersonation.getMessage());
+        verify(userRepository, times(4)).findByIdAndTenantId(userId, TENANT_ID);
+        verify(userRepository, never()).findById(userId);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Status, role and impersonation preserve same-tenant Administrator behaviour")
+    void targetUserMutations_ShouldSucceedForSameTenantTarget() {
+        UUID userId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        User user = user(userId, Role.CLIENT);
+        when(userRepository.findByIdAndTenantId(userId, TENANT_ID))
+                .thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+        when(jwtTokenProvider.generateImpersonationToken(
+                userId, user.getEmail(), Role.FREELANCER.name(), TENANT_ID, adminId))
+                .thenReturn("tenant-scoped-token");
+
+        adminService.updateUserStatus(userId, false);
+        adminService.updateUserRole(userId, Role.FREELANCER);
+        var response = adminService.impersonate(userId, adminId);
+
+        assertEquals(false, user.isActive());
+        assertEquals(Role.FREELANCER, user.getRole());
+        assertEquals("tenant-scoped-token", response.accessToken());
+        assertEquals(TENANT_ID, response.tenantId());
+        verify(userRepository, times(3)).findByIdAndTenantId(userId, TENANT_ID);
+        verify(userRepository, times(2)).save(user);
+        verify(userRepository, never()).findById(userId);
     }
 
     @Test
@@ -172,5 +261,17 @@ class AdminServiceTest {
         assertTrue(response.alerts().stream().anyMatch(alert -> alert.id().equals("failed-logins-24h") && alert.severity().equals("CRITICAL")));
         assertTrue(response.alerts().stream().anyMatch(alert -> alert.id().equals("unanchored-audit-logs")));
         assertTrue(response.alerts().stream().anyMatch(alert -> alert.id().equals("unpaid-invoices")));
+    }
+
+    private User user(UUID id, Role role) {
+        return new User(
+                id,
+                TENANT_ID,
+                "target@tenant-a.test",
+                "hashed-password",
+                "Tenant Target",
+                role,
+                true,
+                null);
     }
 }
