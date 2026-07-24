@@ -16,6 +16,7 @@ import com.clienthub.application.service.ProjectService;
 import com.clienthub.application.service.AnalyticsService;
 import com.clienthub.application.dto.analytics.ProjectProgressResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -190,6 +191,7 @@ public class ProjectController {
     @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
     public ResponseEntity<List<ProjectFreelancerSearchResponse>> searchProjectFreelancers(
             @PathVariable UUID id,
+            @Parameter(description = "Optional case-insensitive email or full-name filter; blank is treated as omitted")
             @RequestParam(required = false) String keyword,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         boolean isAdmin = "ADMIN".equals(currentUser.getRole());
