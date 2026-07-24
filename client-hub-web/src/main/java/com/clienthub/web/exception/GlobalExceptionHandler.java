@@ -1,5 +1,7 @@
 package com.clienthub.web.exception;
 
+import com.clienthub.application.exception.InvalidInvoiceStateException;
+import com.clienthub.application.exception.InvalidTaskStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
 import com.clienthub.web.dto.common.ErrorResponse;
@@ -86,6 +88,22 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler({
+        InvalidTaskStateException.class,
+        InvalidInvoiceStateException.class
+    })
+    public ResponseEntity<ErrorResponse> handleInvalidState(RuntimeException ex) {
+        log.warn("Invalid state transition: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Invalid State Transition",
+                ex.getMessage(),
+                HttpStatus.CONFLICT.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

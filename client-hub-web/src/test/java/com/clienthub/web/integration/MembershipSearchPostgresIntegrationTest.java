@@ -29,6 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.http.MediaType;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -42,6 +43,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -79,6 +81,7 @@ class MembershipSearchPostgresIntegrationTest {
     private User administrator;
     private User outsiderClient;
     private User foreignAdministrator;
+    private User foreignFreelancer;
     private Project project;
 
     @BeforeEach
@@ -103,7 +106,7 @@ class MembershipSearchPostgresIntegrationTest {
         User foreignOwner = createUser(TENANT_B, "owner@mem-b.test", "Foreign Owner", Role.CLIENT, true);
         foreignAdministrator = createUser(
                 TENANT_B, "admin@mem-b.test", "Foreign Administrator", Role.ADMIN, true);
-        createUser(TENANT_B, "foreign.freelancer@mem-b.test", "Foreign Freelancer",
+        foreignFreelancer = createUser(TENANT_B, "foreign.freelancer@mem-b.test", "Foreign Freelancer",
                 Role.FREELANCER, true);
         createProject(TENANT_B, "Foreign Project", foreignOwner);
 
@@ -198,6 +201,25 @@ class MembershipSearchPostgresIntegrationTest {
         performSearch(administrator, TENANT_A, project.getId(), null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(20)));
+    }
+
+    @Test
+    @DisplayName("MEM-03: Cross-tenant membership target is a non-disclosing 404")
+    void crossTenantMembershipTarget_ShouldReturnNotFound() throws Exception {
+        CustomUserDetails userDetails = CustomUserDetails.build(owner);
+        var auth = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+
+        mockMvc.perform(post("/api/projects/{projectId}/members", project.getId())
+                        .header("X-Tenant-ID", TENANT_A)
+                        .with(authentication(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":\"" + foreignFreelancer.getId() + "\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(MockMvcResultMatchers.content().string(
+                        not(org.hamcrest.Matchers.containsString(
+                                "foreign.freelancer@mem-b.test"))));
     }
 
     private org.springframework.test.web.servlet.ResultActions performSearch(

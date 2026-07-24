@@ -12,6 +12,7 @@ import com.clienthub.application.dto.invoice.InvoiceRequest;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
 import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.application.exception.InvalidInvoiceStateException;
 import com.clienthub.application.mapper.InvoiceMapper;
 import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.AuditLogRepository;
@@ -196,11 +197,12 @@ public class InvoiceService extends TenantAwareService {
 
         if (invoice.getPaymentMethod() == PaymentMethod.CRYPTO_ESCROW
                 && CHAIN_DERIVED_CRYPTO_STATUSES.contains(newStatus)) {
-            throw new IllegalStateException("Crypto escrow invoice status is managed by blockchain events");
+            throw new InvalidInvoiceStateException(
+                    "Crypto escrow invoice status is managed by blockchain events");
         }
 
         if (!invoice.getStatus().canTransitionTo(newStatus)) {
-            throw new IllegalStateException(
+            throw new InvalidInvoiceStateException(
                     String.format("Invalid state transition from %s to %s", invoice.getStatus(), newStatus)
             );
         }

@@ -3,6 +3,7 @@ package com.clienthub.application.service;
 import com.clienthub.application.dto.task.TaskRequest;
 import com.clienthub.application.dto.task.TaskResponse;
 import com.clienthub.application.dto.task.TaskSummaryResponse;
+import com.clienthub.application.exception.InvalidTaskStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
 import com.clienthub.application.mapper.TaskMapper;
@@ -28,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
@@ -39,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -244,23 +247,18 @@ class TaskServiceTest {
     }
 
     @Test
-    @DisplayName("Task list uses Client owner scope and preserves filters")
-    void getTasks_clientUsesOwnerScopedRepositoryQuery() {
+    @DisplayName("Task list uses a database specification for Client scope and filters")
+    void getTasks_clientUsesScopedDatabaseSpecification() {
         User owner = user(OWNER_ID, Role.CLIENT, TENANT_ID);
         PageRequest pageable = PageRequest.of(0, 20);
         when(userRepository.findByIdAndTenantId(OWNER_ID, TENANT_ID)).thenReturn(Optional.of(owner));
-        when(taskRepository.findVisibleToClient(
-                TENANT_ID, OWNER_ID, PROJECT_ID, TaskStatus.TODO,
-                TaskPriority.HIGH, FREELANCER_ID, pageable)).thenReturn(Page.empty(pageable));
+        when(taskRepository.findAll(any(Specification.class), eq(pageable)))
+                .thenReturn(Page.empty(pageable));
 
         taskService.getTasks(PROJECT_ID, TaskStatus.TODO, TaskPriority.HIGH,
                 FREELANCER_ID, OWNER_ID, pageable);
 
-        verify(taskRepository).findVisibleToClient(
-                TENANT_ID, OWNER_ID, PROJECT_ID, TaskStatus.TODO,
-                TaskPriority.HIGH, FREELANCER_ID, pageable);
-        verify(taskRepository, never()).findVisibleToAdministrator(
-                any(), any(), any(), any(), any(), any());
+        verify(taskRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -270,15 +268,13 @@ class TaskServiceTest {
         PageRequest pageable = PageRequest.of(0, 20);
         when(userRepository.findByIdAndTenantId(FREELANCER_ID, TENANT_ID))
                 .thenReturn(Optional.of(freelancer));
-        when(taskRepository.findVisibleToFreelancer(
-                TENANT_ID, FREELANCER_ID, PROJECT_ID, null, null, pageable))
+        when(taskRepository.findAll(any(Specification.class), eq(pageable)))
                 .thenReturn(Page.empty(pageable));
 
         taskService.getTasks(PROJECT_ID, null, null, OTHER_FREELANCER_ID,
                 FREELANCER_ID, pageable);
 
-        verify(taskRepository).findVisibleToFreelancer(
-                TENANT_ID, FREELANCER_ID, PROJECT_ID, null, null, pageable);
+        verify(taskRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -287,13 +283,12 @@ class TaskServiceTest {
         User admin = user(ADMIN_ID, Role.ADMIN, TENANT_ID);
         PageRequest pageable = PageRequest.of(0, 20);
         when(userRepository.findByIdAndTenantId(ADMIN_ID, TENANT_ID)).thenReturn(Optional.of(admin));
-        when(taskRepository.findVisibleToAdministrator(
-                TENANT_ID, null, null, null, null, pageable)).thenReturn(Page.empty(pageable));
+        when(taskRepository.findAll(any(Specification.class), eq(pageable)))
+                .thenReturn(Page.empty(pageable));
 
         taskService.getTasks(null, null, null, null, ADMIN_ID, pageable);
 
-        verify(taskRepository).findVisibleToAdministrator(
-                TENANT_ID, null, null, null, null, pageable);
+        verify(taskRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -301,19 +296,14 @@ class TaskServiceTest {
     void getTaskSummary_usesRoleScopedCounts() {
         User owner = user(OWNER_ID, Role.CLIENT, TENANT_ID);
         when(userRepository.findByIdAndTenantId(OWNER_ID, TENANT_ID)).thenReturn(Optional.of(owner));
-        when(taskRepository.countByProjectOwnerIdAndTenantIdAndStatusIn(
-                OWNER_ID, TENANT_ID, List.of(TaskStatus.TODO))).thenReturn(2L);
-        when(taskRepository.countByProjectOwnerIdAndTenantIdAndStatusIn(
-                OWNER_ID, TENANT_ID, List.of(TaskStatus.IN_PROGRESS))).thenReturn(3L);
-        when(taskRepository.countByProjectOwnerIdAndTenantIdAndStatusIn(
-                OWNER_ID, TENANT_ID, List.of(TaskStatus.DONE))).thenReturn(4L);
+        when(taskRepository.count(any(Specification.class))).thenReturn(2L, 3L, 4L);
 
         TaskSummaryResponse summary = taskService.getTaskSummary(OWNER_ID);
 
         assertEquals(2L, summary.getTodo());
         assertEquals(3L, summary.getInProgress());
         assertEquals(4L, summary.getDone());
-        verify(taskRepository, never()).countByTenantIdAndStatusIn(any(), any());
+        verify(taskRepository, times(3)).count(any(Specification.class));
     }
 
     @Test
@@ -484,6 +474,20 @@ class TaskServiceTest {
         taskService.updateTaskStatus(TASK_ID, TaskStatus.IN_PROGRESS, FREELANCER_ID);
 
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    @DisplayName("Invalid task transition raises the controlled task-state exception")
+    void updateTaskStatus_invalidTransitionUsesDomainException() {
+        User owner = user(OWNER_ID, Role.CLIENT, TENANT_ID);
+        Task task = task(project(PROJECT_ID, owner), null);
+        task.setStatus(TaskStatus.TODO);
+        when(taskRepository.findByIdAndTenantId(TASK_ID, TENANT_ID)).thenReturn(Optional.of(task));
+        when(userRepository.findByIdAndTenantId(OWNER_ID, TENANT_ID)).thenReturn(Optional.of(owner));
+
+        assertThrows(InvalidTaskStateException.class,
+                () -> taskService.updateTaskStatus(TASK_ID, TaskStatus.DONE, OWNER_ID));
+        verify(taskRepository, never()).save(any());
     }
 
     @Test

@@ -23,10 +23,13 @@ import com.clienthub.domain.repository.TaskRepository;
 import com.clienthub.domain.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -89,14 +92,9 @@ public class TaskService extends TenantAwareService {
                                        Pageable pageable) {
         String tenantId = getCurrentTenantId();
         User actor = loadActor(currentUserId, tenantId);
-        Page<Task> tasks = switch (actor.getRole()) {
-            case CLIENT -> taskRepository.findVisibleToClient(
-                    tenantId, actor.getId(), projectId, status, priority, assignedToId, pageable);
-            case FREELANCER -> taskRepository.findVisibleToFreelancer(
-                    tenantId, actor.getId(), projectId, status, priority, pageable);
-            case ADMIN -> taskRepository.findVisibleToAdministrator(
-                    tenantId, projectId, status, priority, assignedToId, pageable);
-        };
+        Specification<Task> visibility = buildVisibilitySpecification(
+                actor, tenantId, projectId, status, priority, assignedToId);
+        Page<Task> tasks = taskRepository.findAll(visibility, pageable);
         return tasks.map(taskMapper::toResponse);
     }
 
@@ -253,13 +251,50 @@ public class TaskService extends TenantAwareService {
     }
 
     private long countVisibleByStatuses(User actor, String tenantId, TaskStatus status) {
-        return switch (actor.getRole()) {
-            case CLIENT -> taskRepository.countByProjectOwnerIdAndTenantIdAndStatusIn(
-                    actor.getId(), tenantId, java.util.List.of(status));
-            case FREELANCER -> taskRepository.countByAssignedToIdAndTenantIdAndStatusIn(
-                    actor.getId(), tenantId, java.util.List.of(status));
-            case ADMIN -> taskRepository.countByTenantIdAndStatusIn(
-                    tenantId, java.util.List.of(status));
+        return taskRepository.count(buildVisibilitySpecification(
+                actor, tenantId, null, status, null, null));
+    }
+
+    /**
+     * Builds only predicates that have concrete values. This avoids nullable query parameters
+     * whose SQL type PostgreSQL cannot infer, while keeping list and summary on one visibility
+     * definition.
+     */
+    private Specification<Task> buildVisibilitySpecification(User actor,
+                                                             String tenantId,
+                                                             UUID projectId,
+                                                             TaskStatus status,
+                                                             TaskPriority priority,
+                                                             UUID assignedToId) {
+        return (root, query, criteriaBuilder) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            predicates.add(criteriaBuilder.equal(root.get("tenantId"), tenantId));
+
+            switch (actor.getRole()) {
+                case CLIENT -> predicates.add(criteriaBuilder.equal(
+                        root.get("project").get("owner").get("id"), actor.getId()));
+                case FREELANCER -> predicates.add(criteriaBuilder.equal(
+                        root.get("assignedTo").get("id"), actor.getId()));
+                case ADMIN -> {
+                    // Tenant predicate above is the Administrator visibility boundary.
+                }
+            }
+
+            if (projectId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("project").get("id"), projectId));
+            }
+            if (status != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            }
+            if (priority != null) {
+                predicates.add(criteriaBuilder.equal(root.get("priority"), priority));
+            }
+            if (assignedToId != null && actor.getRole() != Role.FREELANCER) {
+                predicates.add(criteriaBuilder.equal(root.get("assignedTo").get("id"), assignedToId));
+            }
+
+            return criteriaBuilder.and(
+                    predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
     }
 
