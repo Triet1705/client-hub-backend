@@ -13,6 +13,7 @@ import com.clienthub.application.dto.invoice.InvoiceResponse;
 import com.clienthub.application.dto.audit.UserAuditProofResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.InvalidInvoiceStateException;
+import com.clienthub.application.exception.ProjectBudgetExceededException;
 import com.clienthub.application.mapper.InvoiceMapper;
 import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.AuditLogRepository;
@@ -26,6 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -77,7 +80,7 @@ public class InvoiceService extends TenantAwareService {
     public InvoiceResponse createInvoice(InvoiceRequest request, UUID currentUserId) {
         String tenantId = getCurrentTenantId();
 
-        Project project = projectRepository.findByIdAndTenantId(request.getProjectId(), tenantId)
+        Project project = projectRepository.findByIdAndTenantIdForUpdate(request.getProjectId(), tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found or access denied"));
 
         User currentUser = userRepository.findByIdAndTenantId(currentUserId, tenantId)
@@ -96,7 +99,17 @@ public class InvoiceService extends TenantAwareService {
         }
 
         User client = resolveInvoiceClient(request, project, currentUser, tenantId);
+        validateProjectBudget(project, request.getAmount(), tenantId);
         User freelancer = resolveProjectFreelancer(project, tenantId);
+        if (paymentMethod == PaymentMethod.CRYPTO_ESCROW && !isValidWalletAddress(client.getWalletAddress())) {
+            throw new IllegalArgumentException(
+                    "Bind a valid client wallet in Settings before creating a crypto escrow invoice");
+        }
+        if (paymentMethod == PaymentMethod.CRYPTO_ESCROW
+                && client.getWalletAddress().equalsIgnoreCase(request.getFreelancerWalletAddress())) {
+            throw new IllegalArgumentException(
+                    "Freelancer wallet must be different from the bound client wallet");
+        }
 
         Invoice invoice = invoiceMapper.toEntity(request);
 
@@ -112,6 +125,36 @@ public class InvoiceService extends TenantAwareService {
         Invoice savedInvoice = invoiceRepository.save(invoice);
         eventPublisher.publishEvent(new InvoiceStatusChangedEvent(this, savedInvoice, null));
         return invoiceMapper.toResponse(savedInvoice);
+    }
+
+    private void validateProjectBudget(Project project, BigInteger requestedAmount, String tenantId) {
+        if (project.getBudget() == null || requestedAmount == null) {
+            return;
+        }
+
+        BigInteger committedAmount = invoiceRepository.sumAmountByProjectIdAndTenantIdAndStatusNot(
+                project.getId(),
+                tenantId,
+                InvoiceStatus.REFUNDED
+        );
+        if (committedAmount == null) {
+            committedAmount = BigInteger.ZERO;
+        }
+
+        BigDecimal budget = project.getBudget();
+        BigDecimal committed = new BigDecimal(committedAmount);
+        BigDecimal requested = new BigDecimal(requestedAmount);
+        if (committed.add(requested).compareTo(budget) <= 0) {
+            return;
+        }
+
+        BigDecimal remaining = budget.subtract(committed).max(BigDecimal.ZERO);
+        throw new ProjectBudgetExceededException(
+                budget,
+                committed,
+                requested,
+                remaining
+        );
     }
 
     private User resolveInvoiceClient(InvoiceRequest request, Project project, User currentUser, String tenantId) {

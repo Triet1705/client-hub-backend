@@ -70,6 +70,19 @@ class EscrowValidationServiceTest {
     }
 
     @Test
+    void validate_WhenClientWalletIsMissing_ShouldReject() {
+        Invoice invoice = createInvoice();
+        invoice.getClient().setWalletAddress(null);
+
+        EscrowValidationResult result = validationService.validate(
+                invoice,
+                createSnapshot(CLIENT_WALLET, FREELANCER_WALLET, TOKEN_ADDRESS, RAW_AMOUNT),
+                EscrowStatus.DEPOSITED);
+
+        assertFalse(result.valid());
+    }
+
+    @Test
     void validate_WhenFreelancerDiffers_ShouldReject() {
         EscrowValidationResult result = validationService.validate(
                 createInvoice(),

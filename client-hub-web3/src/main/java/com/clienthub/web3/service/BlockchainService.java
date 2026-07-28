@@ -49,6 +49,7 @@ public class BlockchainService {
     public void init() {
         if (blockchainEnabled) {
             this.web3j = Web3j.build(new HttpService(nodeUrl));
+            log.info("Blockchain integration enabled: node={}, escrowContract={}", nodeUrl, contractAddress);
         }
     }
 
@@ -78,13 +79,32 @@ public class BlockchainService {
                     Transaction.createEthCallTransaction(null, contractAddress, encodedFunction),
                     DefaultBlockParameterName.LATEST).send();
 
+            if (response.hasError()) {
+                log.error(
+                        "Escrow snapshot RPC failed for invoice {} at contract {}: code={}, message={}",
+                        invoiceId,
+                        contractAddress,
+                        response.getError().getCode(),
+                        response.getError().getMessage());
+                return Optional.empty();
+            }
+
             String value = response.getValue();
             if (value == null || value.equals("0x")) {
+                log.error(
+                        "Escrow snapshot returned no data for invoice {} at contract {}; check the active deployment address",
+                        invoiceId,
+                        contractAddress);
                 return Optional.empty();
             }
 
             List<Type> decoded = FunctionReturnDecoder.decode(value, function.getOutputParameters());
             if (decoded.size() < 5) {
+                log.error(
+                        "Escrow snapshot returned {} fields for invoice {} at contract {}; expected 5",
+                        decoded.size(),
+                        invoiceId,
+                        contractAddress);
                 return Optional.empty();
             }
 

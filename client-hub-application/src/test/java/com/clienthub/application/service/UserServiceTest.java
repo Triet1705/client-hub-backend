@@ -3,6 +3,7 @@ package com.clienthub.application.service;
 import com.clienthub.application.dto.user.ChangePasswordRequest;
 import com.clienthub.application.dto.user.CurrentUserResponse;
 import com.clienthub.application.dto.user.UpdateUserPreferencesRequest;
+import com.clienthub.application.exception.WalletAlreadyBoundException;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.entity.UserPreferences;
@@ -118,6 +119,35 @@ class UserServiceTest {
         assertFalse(preferences.isNotifyComments());
         assertFalse(preferences.isNotifyInvoices());
         verify(userPreferencesRepository).save(preferences);
+    }
+
+    @Test
+    @DisplayName("Wallet update rejects an address already bound to another account")
+    void updateWalletAddress_rejectsExistingOwner() {
+        User user = createUser();
+        String walletAddress = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.of(user));
+        when(userRepository.existsByWalletAddressIgnoreCaseAndIdNot(walletAddress, USER_ID))
+                .thenReturn(true);
+
+        assertThrows(WalletAlreadyBoundException.class,
+                () -> userService.updateWalletAddress(USER_ID, walletAddress));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Wallet update persists an unowned valid address")
+    void updateWalletAddress_persistsAvailableAddress() {
+        User user = createUser();
+        String walletAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.of(user));
+        when(userRepository.existsByWalletAddressIgnoreCaseAndIdNot(walletAddress, USER_ID))
+                .thenReturn(false);
+
+        userService.updateWalletAddress(USER_ID, walletAddress);
+
+        assertEquals(walletAddress, user.getWalletAddress());
+        verify(userRepository).save(user);
     }
 
     private User createUser() {

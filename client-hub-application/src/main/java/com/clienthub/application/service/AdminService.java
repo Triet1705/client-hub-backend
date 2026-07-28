@@ -31,6 +31,8 @@ import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
+import com.clienthub.common.context.TenantContext;
 import jakarta.persistence.criteria.Predicate;
 import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
@@ -241,11 +243,15 @@ public class AdminService {
     }
 
     public ImpersonationResponse impersonate(UUID targetUserId, UUID adminId) {
-        User targetUser = userRepository.findById(targetUserId)
+        String tenantId = TenantContext.getTenantId();
+        User targetUser = userRepository.findByIdAndTenantId(targetUserId, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + targetUserId));
 
         if (targetUser.getRole() == Role.ADMIN) {
             throw new org.springframework.security.access.AccessDeniedException("Cannot impersonate another ADMIN user.");
+        }
+        if (!targetUser.isActive() || targetUser.isAccountLocked()) {
+            throw new UnsafeImpersonationTargetException();
         }
 
         String token = jwtTokenProvider.generateImpersonationToken(

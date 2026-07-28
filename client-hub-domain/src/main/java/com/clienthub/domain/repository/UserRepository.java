@@ -38,6 +38,8 @@ public interface UserRepository extends JpaRepository<User, UUID>,
 
     boolean existsByEmail(String email);
 
+    boolean existsByWalletAddressIgnoreCaseAndIdNot(String walletAddress, UUID id);
+
     @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.email = :email AND u.tenantId = :tenantId")
     boolean existsByEmailAndTenantId(@Param("email") String email, @Param("tenantId") String tenantId);
 

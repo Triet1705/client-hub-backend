@@ -11,10 +11,15 @@ import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
+import com.clienthub.common.context.TenantContext;
+import com.clienthub.domain.entity.User;
+import com.clienthub.domain.enums.Role;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,11 +38,16 @@ import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import java.util.Optional;
+import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 class AdminServiceTest {
@@ -73,6 +83,7 @@ class AdminServiceTest {
 
     @BeforeEach
     void setUp() {
+        TenantContext.setTenantId("default");
         adminService = new AdminService(
                 userRepository,
                 projectRepository,
@@ -83,6 +94,60 @@ class AdminServiceTest {
                 jdbcTemplate,
                 redisTemplate,
                 new RestTemplateBuilder());
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
+    }
+
+    @Test
+    @DisplayName("Inactive account cannot be impersonated")
+    void impersonate_InactiveTarget_ShouldRejectWithoutGeneratingToken() {
+        UUID targetId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        User target = User.builder()
+                .id(targetId)
+                .tenantId("default")
+                .email("inactive@example.test")
+                .password("not-used")
+                .fullName("Inactive User")
+                .role(Role.CLIENT)
+                .active(false)
+                .build();
+        when(userRepository.findByIdAndTenantId(targetId, "default"))
+                .thenReturn(Optional.of(target));
+
+        assertThrows(
+                UnsafeImpersonationTargetException.class,
+                () -> adminService.impersonate(targetId, adminId));
+        verify(jwtTokenProvider, never()).generateImpersonationToken(
+                any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Temporarily locked account cannot be impersonated")
+    void impersonate_LockedTarget_ShouldRejectWithoutGeneratingToken() {
+        UUID targetId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        User target = User.builder()
+                .id(targetId)
+                .tenantId("default")
+                .email("locked@example.test")
+                .password("not-used")
+                .fullName("Locked User")
+                .role(Role.FREELANCER)
+                .active(true)
+                .build();
+        target.setAccountLockedUntil(Instant.now().plusSeconds(300));
+        when(userRepository.findByIdAndTenantId(targetId, "default"))
+                .thenReturn(Optional.of(target));
+
+        assertThrows(
+                UnsafeImpersonationTargetException.class,
+                () -> adminService.impersonate(targetId, adminId));
+        verify(jwtTokenProvider, never()).generateImpersonationToken(
+                any(), anyString(), anyString(), anyString(), any());
     }
 
     @Test

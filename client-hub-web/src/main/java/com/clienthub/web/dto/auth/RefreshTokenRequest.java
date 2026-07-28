@@ -1,9 +1,8 @@
 package com.clienthub.web.dto.auth;
 
-import jakarta.validation.constraints.NotBlank;
-
 public class RefreshTokenRequest {
-    @NotBlank(message = "Refresh token must not be empty!")
+    // Optional for browser sessions because the authoritative refresh token is
+    // supplied by the backend-managed HttpOnly cookie.
     private String refreshToken;
 
     public String getRefreshToken() {

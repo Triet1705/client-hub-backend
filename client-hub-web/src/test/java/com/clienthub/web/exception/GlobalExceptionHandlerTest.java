@@ -2,15 +2,20 @@ package com.clienthub.web.exception;
 
 import com.clienthub.application.exception.InvalidInvoiceStateException;
 import com.clienthub.application.exception.InvalidTaskStateException;
+import com.clienthub.application.exception.WalletAlreadyBoundException;
+import com.clienthub.application.exception.ProjectBudgetExceededException;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
 import com.clienthub.domain.enums.TaskStatus;
 import com.clienthub.web.dto.common.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.UUID;
+import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -61,5 +66,58 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getMessage())
                 .isEqualTo("An unexpected error occurred. Please try again later.");
         assertThat(response.getBody().getMessage()).doesNotContain("sensitive");
+    }
+
+    @Test
+    void walletOwnershipConflictReturnsConflict() {
+        ResponseEntity<ErrorResponse> response = handler.handleWalletAlreadyBound(
+                new WalletAlreadyBoundException());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("Wallet Already Bound");
+        assertThat(response.getBody().getMessage())
+                .isEqualTo("This wallet is already bound to another Client Hub account.");
+    }
+
+    @Test
+    void projectBudgetConflictReturnsStructuredConflict() {
+        ResponseEntity<ErrorResponse> response = handler.handleProjectBudgetExceeded(
+                new ProjectBudgetExceededException(
+                        new BigDecimal("10000"),
+                        new BigDecimal("9000"),
+                        new BigDecimal("2000"),
+                        new BigDecimal("1000")));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("PROJECT_BUDGET_EXCEEDED");
+        assertThat(response.getBody().getDetails()).containsExactly(
+                "budget=10000.00",
+                "committed=9000.00",
+                "requested=2000.00",
+                "remaining=1000.00");
+    }
+
+    @Test
+    void unsafeImpersonationTargetReturnsConflict() {
+        ResponseEntity<ErrorResponse> response = handler.handleUnsafeImpersonationTarget(
+                new UnsafeImpersonationTargetException());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError())
+                .isEqualTo("IMPERSONATION_TARGET_UNAVAILABLE");
+    }
+
+    @Test
+    void missingRequestParameterReturnsBadRequestInsteadOfInternalServerError() {
+        ResponseEntity<ErrorResponse> response = handler.handleMissingRequestParameter(
+                new MissingServletRequestParameterException("status", "TaskStatus"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("Validation Failed");
+        assertThat(response.getBody().getDetails()).containsExactly("status: is required");
     }
 }
