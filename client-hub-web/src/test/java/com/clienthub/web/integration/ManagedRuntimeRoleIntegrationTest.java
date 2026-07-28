@@ -67,7 +67,7 @@ class ManagedRuntimeRoleIntegrationTest {
                     migrationStatement.executeQuery(
                             "SELECT count(*) FROM flyway_schema_history WHERE success");
             assertTrue(migrationCount.next());
-            assertEquals(34, migrationCount.getInt(1));
+            assertEquals(35, migrationCount.getInt(1));
 
             ResultSet publicSeeds =
                     migrationStatement.executeQuery(
