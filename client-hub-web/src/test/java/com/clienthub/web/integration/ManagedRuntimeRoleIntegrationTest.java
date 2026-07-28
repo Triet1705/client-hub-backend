@@ -48,6 +48,7 @@ class ManagedRuntimeRoleIntegrationTest {
         registry.add("spring.flyway.user", () -> MIGRATION_USER);
         registry.add("spring.flyway.password", () -> MIGRATION_PASSWORD);
         registry.add("spring.flyway.placeholders.runtimeRole", () -> RUNTIME_USER);
+        registry.add("spring.flyway.placeholders.hostedDemo", () -> "true");
         registry.add("spring.cache.type", () -> "none");
         registry.add("rate-limit.redis.enabled", () -> "false");
         registry.add(
@@ -66,7 +67,26 @@ class ManagedRuntimeRoleIntegrationTest {
                     migrationStatement.executeQuery(
                             "SELECT count(*) FROM flyway_schema_history WHERE success");
             assertTrue(migrationCount.next());
-            assertEquals(33, migrationCount.getInt(1));
+            assertEquals(34, migrationCount.getInt(1));
+
+            ResultSet publicSeeds =
+                    migrationStatement.executeQuery(
+                            """
+                            SELECT count(*)
+                            FROM users
+                            WHERE tenant_id = 'default'
+                              AND email IN (
+                                  'admin@clienthub.io',
+                                  'freelancer@demo.com',
+                                  'client@demo.com',
+                                  'jane.freelancer@demo.com',
+                                  'devon.freelancer@demo.com',
+                                  'minh.freelancer@demo.com'
+                              )
+                              AND is_active
+                            """);
+            assertTrue(publicSeeds.next());
+            assertEquals(0, publicSeeds.getInt(1));
 
             ResultSet migrationRole =
                     migrationStatement.executeQuery(
