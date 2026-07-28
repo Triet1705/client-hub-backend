@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("prod")
+@Profile({"prod", "hosted"})
 public class ProductionReadinessConfig implements ApplicationRunner {
 
     @Value("${jwt.secret:}")
@@ -26,6 +26,12 @@ public class ProductionReadinessConfig implements ApplicationRunner {
 
     @Value("${spring.data.redis.password:}")
     private String redisPassword;
+
+    @Value("${spring.cache.type:none}")
+    private String cacheType;
+
+    @Value("${ai.enabled:false}")
+    private boolean aiEnabled;
 
     @Value("${cors.allowed-origins:}")
     private String allowedOrigins;
@@ -51,9 +57,25 @@ public class ProductionReadinessConfig implements ApplicationRunner {
 
         require(jwtSecret.length() >= 32, failures, "jwt.secret must be set to a strong production value");
         rejectDefault(datasourcePassword, "postgres", failures, "spring.datasource.password must not use the dev default");
-        rejectDefault(minioAccessKey, "minioadmin", failures, "minio.access-key must not use the dev default");
-        rejectDefault(minioSecretKey, "minioadmin", failures, "minio.secret-key must not use the dev default");
-        rejectDefault(redisPassword, "redis_password", failures, "spring.data.redis.password must not use the dev default");
+        if (aiEnabled) {
+            rejectDefault(
+                    minioAccessKey,
+                    "minioadmin",
+                    failures,
+                    "minio.access-key must not use the dev default when AI is enabled");
+            rejectDefault(
+                    minioSecretKey,
+                    "minioadmin",
+                    failures,
+                    "minio.secret-key must not use the dev default when AI is enabled");
+        }
+        if (!"none".equalsIgnoreCase(cacheType)) {
+            rejectDefault(
+                    redisPassword,
+                    "redis_password",
+                    failures,
+                    "spring.data.redis.password must not use the dev default when cache is enabled");
+        }
         require(!allowedOrigins.isBlank(), failures, "cors.allowed-origins must be explicit in prod");
         require(!allowedOrigins.contains("*"), failures, "cors.allowed-origins must not contain wildcard origins in prod");
         require(!allowedOrigins.contains("localhost") && !allowedOrigins.contains("127.0.0.1"),
