@@ -42,6 +42,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,6 +97,12 @@ public class AdminService extends TenantAwareService {
 
     @Value("${ai.ollama.model:llama3.2:3b}")
     private String ollamaModel;
+
+    @Value("${ai.enabled:true}")
+    private boolean aiEnabled;
+
+    @Value("${spring.cache.type:none}")
+    private String cacheType;
 
     @Value("${blockchain.enabled:false}")
     private boolean blockchainEnabled;
@@ -310,6 +317,7 @@ public class AdminService extends TenantAwareService {
 
     public List<AdminFeatureFlag> getFeatureFlags() {
         boolean blockchainConfigured = isBlockchainConfigured();
+        boolean redisEnabled = isRedisEnabled();
         boolean rateLimitingEnabled = loginRateLimit > 0 && registerRateLimit > 0;
 
         return List.of(
@@ -323,10 +331,17 @@ public class AdminService extends TenantAwareService {
                 new AdminFeatureFlag(
                         "ai-extraction",
                         "AI extraction",
-                        isConfigured(ollamaUrl),
-                        isConfigured(ollamaUrl) ? "CONFIGURED" : "DISABLED",
+                        aiEnabled,
+                        aiEnabled ? (isConfigured(ollamaUrl) ? "CONFIGURED" : "NEEDS_CONFIG") : "DISABLED",
                         "Enables smart task extraction through Ollama model " + ollamaModel + ".",
-                        "ai.ollama.url"),
+                        "ai.enabled"),
+                new AdminFeatureFlag(
+                        "redis-cache",
+                        "Redis cache",
+                        redisEnabled,
+                        redisEnabled ? "ACTIVE" : "DISABLED",
+                        "Provides optional distributed caching; Web2 core remains available when disabled.",
+                        "spring.cache.type"),
                 new AdminFeatureFlag(
                         "tenant-header-required",
                         "Tenant header enforcement",
@@ -633,7 +648,7 @@ public class AdminService extends TenantAwareService {
     }
 
     private void addHealthAlert(List<OperationalAlert> alerts, String id, String label, ComponentHealth health, Instant now) {
-        if ("UP".equals(health.status())) {
+        if (!health.enabled() || "UP".equals(health.status()) || "DISABLED".equals(health.status())) {
             return;
         }
         alerts.add(new OperationalAlert(
@@ -646,13 +661,13 @@ public class AdminService extends TenantAwareService {
     }
 
     private String deriveOverallStatus(ComponentHealth database, ComponentHealth redis, ComponentHealth ai, ComponentHealth blockchain) {
-        if ("DOWN".equals(database.status()) || "DOWN".equals(redis.status())) {
+        List<ComponentHealth> components = List.of(database, redis, ai, blockchain);
+        if (components.stream().anyMatch(component ->
+                component.enabled() && component.required() && "DOWN".equals(component.status()))) {
             return "DOWN";
         }
-        if (!"UP".equals(database.status())
-                || !"UP".equals(redis.status())
-                || !"UP".equals(ai.status())
-                || !"UP".equals(blockchain.status())) {
+        if (components.stream().anyMatch(component ->
+                component.enabled() && !"UP".equals(component.status()))) {
             return "DEGRADED";
         }
         return "UP";
@@ -664,54 +679,91 @@ public class AdminService extends TenantAwareService {
             jdbcTemplate.execute("SELECT 1");
             long latency = System.currentTimeMillis() - start;
             if (latency > 500) {
-                return new ComponentHealth("DEGRADED", "Active (" + latency + "ms)", latency);
+                return new ComponentHealth("DEGRADED", "Active but slow", latency, true, true);
             }
-            return new ComponentHealth("UP", "Active (" + latency + "ms)", latency);
+            return new ComponentHealth("UP", "Active", latency, true, true);
         } catch (Exception e) {
-            return new ComponentHealth("DOWN", "Disconnected", System.currentTimeMillis() - start);
+            return new ComponentHealth("DOWN", "Disconnected", System.currentTimeMillis() - start, true, true);
         }
     }
 
     private ComponentHealth checkRedis() {
+        if (!isRedisEnabled()) {
+            return disabledHealth("Disabled by cache configuration");
+        }
         long start = System.currentTimeMillis();
         try {
             String pingResult = redisTemplate.getConnectionFactory().getConnection().ping();
             long latency = System.currentTimeMillis() - start;
             if (latency > 500) {
-                return new ComponentHealth("DEGRADED", "Connected (" + latency + "ms)", latency);
+                return new ComponentHealth("DEGRADED", "Connected but slow", latency, true, false);
             }
-            return new ComponentHealth("UP", "Connected (" + pingResult + ", " + latency + "ms)", latency);
+            return new ComponentHealth("UP", "Connected (" + pingResult + ")", latency, true, false);
         } catch (Exception e) {
-            return new ComponentHealth("DOWN", "Disconnected", System.currentTimeMillis() - start);
+            return new ComponentHealth("DOWN", "Enabled but disconnected", System.currentTimeMillis() - start, true, false);
         }
     }
 
     private ComponentHealth checkAiEngine() {
+        if (!aiEnabled) {
+            return disabledHealth("Disabled by runtime configuration");
+        }
+        if (!isConfigured(ollamaUrl)) {
+            return new ComponentHealth("DEGRADED", "Enabled but endpoint is missing", null, true, false);
+        }
         long start = System.currentTimeMillis();
         try {
             restTemplate.getForEntity(ollamaUrl + "/api/tags", String.class);
             long latency = System.currentTimeMillis() - start;
             if (latency > 5000) {
-                return new ComponentHealth("DEGRADED", "Operational (" + latency + "ms)", latency);
+                return new ComponentHealth("DEGRADED", "Operational but slow", latency, true, false);
             }
-            return new ComponentHealth("UP", "Operational (" + latency + "ms)", latency);
+            return new ComponentHealth("UP", "Operational", latency, true, false);
         } catch (Exception e) {
-            return new ComponentHealth("DOWN", "Offline", System.currentTimeMillis() - start);
+            return new ComponentHealth("DOWN", "Enabled but offline", System.currentTimeMillis() - start, true, false);
         }
     }
 
     private ComponentHealth checkBlockchainConfig() {
         if (!blockchainEnabled) {
-            return new ComponentHealth("UP", "Disabled", 0);
+            return disabledHealth("Disabled by runtime configuration");
         }
         if (!isBlockchainConfigured()) {
-            return new ComponentHealth("DEGRADED", "Enabled but missing node or contract", 0);
+            return new ComponentHealth("DEGRADED", "Enabled but missing node or contract", null, true, false);
         }
-        return new ComponentHealth("UP", "Configured", 0);
+
+        long start = System.currentTimeMillis();
+        try {
+            Map<String, Object> request = Map.of(
+                    "jsonrpc", "2.0",
+                    "method", "eth_chainId",
+                    "params", List.of(),
+                    "id", 1);
+            var response = restTemplate.postForEntity(blockchainNodeUrl, request, Map.class);
+            long latency = System.currentTimeMillis() - start;
+            Object result = response.getBody() != null ? response.getBody().get("result") : null;
+            if (!response.getStatusCode().is2xxSuccessful() || !(result instanceof String chainId) || chainId.isBlank()) {
+                return new ComponentHealth("DOWN", "RPC returned an invalid response", latency, true, false);
+            }
+            if (latency > 5000) {
+                return new ComponentHealth("DEGRADED", "RPC reachable but slow", latency, true, false);
+            }
+            return new ComponentHealth("UP", "RPC reachable", latency, true, false);
+        } catch (Exception e) {
+            return new ComponentHealth("DOWN", "Enabled but RPC is unreachable", System.currentTimeMillis() - start, true, false);
+        }
     }
 
     private boolean isBlockchainConfigured() {
         return blockchainEnabled && isConfigured(blockchainNodeUrl) && isConfigured(blockchainContractAddress);
+    }
+
+    private boolean isRedisEnabled() {
+        return cacheType != null && "redis".equalsIgnoreCase(cacheType.trim());
+    }
+
+    private ComponentHealth disabledHealth(String label) {
+        return new ComponentHealth("DISABLED", label, null, false, false);
     }
 
     private boolean isConfigured(String value) {

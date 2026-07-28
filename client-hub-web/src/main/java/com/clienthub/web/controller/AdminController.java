@@ -116,7 +116,7 @@ public class AdminController {
 
     @GetMapping("/health")
     @Operation(summary = "Get system health",
-               description = "Checks DB, Redis, AI Engine, blockchain readiness, JVM memory, and uptime")
+               description = "Checks required dependencies and enabled optional services; disabled services are reported without probing")
     public ResponseEntity<AdminHealthResponse> getSystemHealth() {
         return ResponseEntity.ok(adminService.getSystemHealth());
     }
