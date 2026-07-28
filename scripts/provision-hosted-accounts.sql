@@ -12,6 +12,26 @@ SET display_name = EXCLUDED.display_name,
     updated_at = CURRENT_TIMESTAMP,
     last_modified_by = 'hosted-provisioning';
 
+INSERT INTO roles (tenant_id, name, description, created_by)
+VALUES
+    (:'tenant_id', 'ADMIN', 'Full platform administrative access', 'hosted-provisioning'),
+    (:'tenant_id', 'CLIENT', 'Client workspace access', 'hosted-provisioning'),
+    (:'tenant_id', 'FREELANCER', 'Freelancer workspace access', 'hosted-provisioning')
+ON CONFLICT (name, tenant_id) DO UPDATE
+SET description = EXCLUDED.description,
+    updated_at = CURRENT_TIMESTAMP,
+    last_modified_by = 'hosted-provisioning';
+
+INSERT INTO role_permissions (role_id, permission_id, granted_by)
+SELECT r.id, p.id, 'hosted-provisioning'
+FROM roles r
+JOIN permissions p
+  ON r.name = 'ADMIN'
+  OR (r.name = 'FREELANCER' AND p.name IN ('USER_READ', 'USER_UPDATE'))
+  OR (r.name = 'CLIENT' AND p.name = 'USER_READ')
+WHERE r.tenant_id = :'tenant_id'
+ON CONFLICT (role_id, permission_id) DO NOTHING;
+
 INSERT INTO users (tenant_id, email, password, full_name, role, is_active, created_by)
 VALUES
     (:'tenant_id', :'admin_email', :'admin_password_hash', :'admin_name', 'ADMIN', TRUE, 'hosted-provisioning'),
