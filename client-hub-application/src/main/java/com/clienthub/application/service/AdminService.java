@@ -33,6 +33,7 @@ import com.clienthub.domain.repository.InvoiceRepository;
 import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
 import jakarta.persistence.criteria.Predicate;
 import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
@@ -244,6 +245,9 @@ public class AdminService extends TenantAwareService {
 
         if (targetUser.getRole() == Role.ADMIN) {
             throw new org.springframework.security.access.AccessDeniedException("Cannot impersonate another ADMIN user.");
+        }
+        if (!targetUser.isActive() || targetUser.isAccountLocked()) {
+            throw new UnsafeImpersonationTargetException();
         }
 
         String token = jwtTokenProvider.generateImpersonationToken(

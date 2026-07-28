@@ -2,11 +2,13 @@ package com.clienthub.domain.repository;
 
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.enums.ProjectStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,6 +28,14 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
     @EntityGraph(attributePaths = {"owner"})
     @Query("SELECT p FROM Project p WHERE p.id = :id AND p.tenantId = :tenantId")
     Optional<Project> findByIdAndTenantId(@Param("id") UUID id, @Param("tenantId") String tenantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"owner"})
+    @Query("SELECT p FROM Project p WHERE p.id = :id AND p.tenantId = :tenantId")
+    Optional<Project> findByIdAndTenantIdForUpdate(
+            @Param("id") UUID id,
+            @Param("tenantId") String tenantId
+    );
 
     @EntityGraph(attributePaths = {"owner"})
     @Query("SELECT p FROM Project p WHERE p.tenantId = :tenantId")
@@ -83,6 +93,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
     );
 
     boolean existsByIdAndTenantId(UUID id, String tenantId);
+    boolean existsByIdAndTenantIdAndOwnerId(UUID id, String tenantId, UUID ownerId);
     long countByTenantId(String tenantId);
     long countByTenantIdAndStatusIn(String tenantId, java.util.List<ProjectStatus> statuses);
 

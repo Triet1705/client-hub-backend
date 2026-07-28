@@ -3,7 +3,8 @@ package com.clienthub.web.websocket;
 import com.clienthub.domain.event.InvoiceStatusChangedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,7 @@ public class InvoiceStatusNotifier {
 
     public record InvoiceStatusMessage(Long id, com.clienthub.domain.enums.InvoiceStatus status, com.clienthub.domain.enums.EscrowStatus escrowStatus) {}
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleInvoiceStatusChangedEvent(InvoiceStatusChangedEvent event) {
         log.info("Received InvoiceStatusChangedEvent for invoice {}", event.getInvoice().getId());
         

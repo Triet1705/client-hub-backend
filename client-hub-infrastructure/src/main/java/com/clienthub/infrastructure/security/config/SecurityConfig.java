@@ -78,6 +78,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/system/config").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // SockJS performs an unauthenticated HTTP transport handshake.
+                        // The STOMP CONNECT frame is authenticated in WebSocketConfig.
+                        .requestMatchers("/ws/**").permitAll()
 
                         // Restrict Swagger to admins (Task 3.2)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").hasRole(Role.ADMIN.name())

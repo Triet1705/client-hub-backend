@@ -93,12 +93,19 @@ class AuthRestrictedRlsIntegrationTest {
         Cookie refreshCookie = login.getResponse().getCookie("refresh_token");
         assertNotNull(refreshCookie, "Successful login must set the refresh-token cookie");
 
-        mockMvc.perform(post("/api/auth/refresh-token")
+        MvcResult refresh = mockMvc.perform(post("/api/auth/refresh-token")
                         .header("X-Tenant-ID", "tenant-alpha")
                         .cookie(refreshCookie)
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tenant_id").value("tenant-alpha"));
+                .andExpect(jsonPath("$.tenant_id").value("tenant-alpha"))
+                .andExpect(jsonPath("$.expires_in").value(900))
+                .andReturn();
+
+        assertNotNull(
+                refresh.getResponse().getCookie("refresh_token"),
+                "Cookie-only refresh must rotate the HttpOnly refresh token");
     }
 
     @Test

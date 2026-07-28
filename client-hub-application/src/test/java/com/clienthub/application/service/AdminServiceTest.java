@@ -4,6 +4,7 @@ import com.clienthub.application.dto.admin.AdminEventItem;
 import com.clienthub.application.dto.admin.AdminFeatureFlag;
 import com.clienthub.application.dto.admin.AdminControlCenterResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.AuditLog;
 import com.clienthub.domain.entity.User;
@@ -161,17 +162,66 @@ class AdminServiceTest {
                 userId, user.getEmail(), Role.FREELANCER.name(), TENANT_ID, adminId))
                 .thenReturn("tenant-scoped-token");
 
-        adminService.updateUserStatus(userId, false);
+        adminService.updateUserStatus(userId, true);
         adminService.updateUserRole(userId, Role.FREELANCER);
         var response = adminService.impersonate(userId, adminId);
 
-        assertEquals(false, user.isActive());
+        assertTrue(user.isActive());
         assertEquals(Role.FREELANCER, user.getRole());
         assertEquals("tenant-scoped-token", response.accessToken());
         assertEquals(TENANT_ID, response.tenantId());
         verify(userRepository, times(3)).findByIdAndTenantId(userId, TENANT_ID);
         verify(userRepository, times(2)).save(user);
         verify(userRepository, never()).findById(userId);
+    }
+
+    @Test
+    @DisplayName("Inactive account cannot be impersonated")
+    void impersonate_InactiveTarget_ShouldRejectWithoutGeneratingToken() {
+        UUID targetId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        User target = User.builder()
+                .id(targetId)
+                .tenantId(TENANT_ID)
+                .email("inactive@example.test")
+                .password("not-used")
+                .fullName("Inactive User")
+                .role(Role.CLIENT)
+                .active(false)
+                .build();
+        when(userRepository.findByIdAndTenantId(targetId, TENANT_ID))
+                .thenReturn(Optional.of(target));
+
+        assertThrows(
+                UnsafeImpersonationTargetException.class,
+                () -> adminService.impersonate(targetId, adminId));
+        verify(jwtTokenProvider, never()).generateImpersonationToken(
+                any(), anyString(), anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Temporarily locked account cannot be impersonated")
+    void impersonate_LockedTarget_ShouldRejectWithoutGeneratingToken() {
+        UUID targetId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        User target = User.builder()
+                .id(targetId)
+                .tenantId(TENANT_ID)
+                .email("locked@example.test")
+                .password("not-used")
+                .fullName("Locked User")
+                .role(Role.FREELANCER)
+                .active(true)
+                .build();
+        target.setAccountLockedUntil(Instant.now().plusSeconds(300));
+        when(userRepository.findByIdAndTenantId(targetId, TENANT_ID))
+                .thenReturn(Optional.of(target));
+
+        assertThrows(
+                UnsafeImpersonationTargetException.class,
+                () -> adminService.impersonate(targetId, adminId));
+        verify(jwtTokenProvider, never()).generateImpersonationToken(
+                any(), anyString(), anyString(), anyString(), any());
     }
 
     @Test

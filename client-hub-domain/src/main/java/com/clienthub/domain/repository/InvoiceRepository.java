@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,19 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Long> findIdsByProjectIdAndTenantId(
             @Param("projectId") UUID projectId,
             @Param("tenantId") String tenantId
+    );
+
+    @Query("""
+            SELECT COALESCE(SUM(i.amount), 0)
+            FROM Invoice i
+            WHERE i.project.id = :projectId
+              AND i.tenantId = :tenantId
+              AND i.status <> :excludedStatus
+            """)
+    BigInteger sumAmountByProjectIdAndTenantIdAndStatusNot(
+            @Param("projectId") UUID projectId,
+            @Param("tenantId") String tenantId,
+            @Param("excludedStatus") InvoiceStatus excludedStatus
     );
     
     @Query("""

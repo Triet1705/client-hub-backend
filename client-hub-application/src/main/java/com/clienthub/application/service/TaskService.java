@@ -13,6 +13,7 @@ import com.clienthub.common.service.TenantAwareService;
 import com.clienthub.domain.entity.Project;
 import com.clienthub.domain.entity.Task;
 import com.clienthub.domain.entity.User;
+import com.clienthub.domain.event.TaskChangedEvent;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.domain.enums.TaskPriority;
@@ -24,6 +25,7 @@ import com.clienthub.domain.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,19 +44,22 @@ public class TaskService extends TenantAwareService {
     private final UserRepository userRepository;
     private final TaskMapper taskMapper;
     private final NotificationProducerService notificationProducerService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TaskService(TaskRepository taskRepository,
                        ProjectRepository projectRepository,
                        ProjectMemberRepository projectMemberRepository,
                        UserRepository userRepository,
                        TaskMapper taskMapper,
-                       NotificationProducerService notificationProducerService) {
+                       NotificationProducerService notificationProducerService,
+                       ApplicationEventPublisher eventPublisher) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.userRepository = userRepository;
         this.taskMapper = taskMapper;
         this.notificationProducerService = notificationProducerService;
+        this.eventPublisher = eventPublisher;
     }
 
     @LogAudit(action = AuditAction.CREATE, entityType = "TASK", entityId = "#result.id")
@@ -80,6 +85,8 @@ public class TaskService extends TenantAwareService {
         }
 
         Task savedTask = taskRepository.save(task);
+        notificationProducerService.notifyTaskCreated(savedTask, actor);
+        publishTaskChanged(savedTask, null, "CREATED");
         return taskMapper.toResponse(savedTask);
     }
 
@@ -125,7 +132,8 @@ public class TaskService extends TenantAwareService {
             TaskAccessPolicy.requireProjectCreateAccess(effectiveProject, actor, false);
         }
 
-        User effectiveAssignee = task.getAssignedTo();
+        User previousAssignee = task.getAssignedTo();
+        User effectiveAssignee = previousAssignee;
         boolean changingAssignee = request.getAssignedToId() != null
                 && (effectiveAssignee == null
                 || !effectiveAssignee.getId().equals(request.getAssignedToId()));
@@ -149,6 +157,10 @@ public class TaskService extends TenantAwareService {
         task.setAssignedTo(effectiveAssignee);
 
         Task updatedTask = taskRepository.save(task);
+        publishTaskChanged(
+                updatedTask,
+                previousAssignee != null ? previousAssignee.getId() : null,
+                "UPDATED");
         return taskMapper.toResponse(updatedTask);
     }
 
@@ -167,6 +179,7 @@ public class TaskService extends TenantAwareService {
         if (oldStatus != TaskStatus.DONE && newStatus == TaskStatus.DONE) {
             notificationProducerService.notifyTaskCompleted(updatedTask);
         }
+        publishTaskChanged(updatedTask, null, "STATUS_CHANGED");
         return taskMapper.toResponse(updatedTask);
     }
 
@@ -187,6 +200,10 @@ public class TaskService extends TenantAwareService {
         User actor = loadActor(currentUserId, tenantId);
         TaskAccessPolicy.requireOwnerOrAdmin(
                 task, actor, "Only the project owner or Administrator can delete this task");
+        publishTaskChanged(
+                task,
+                task.getAssignedTo() != null ? task.getAssignedTo().getId() : null,
+                "DELETED");
         taskRepository.delete(task);
     }
 
@@ -199,8 +216,10 @@ public class TaskService extends TenantAwareService {
                 task, actor, "Only the project owner or Administrator can assign this task");
         User assignee = loadEligibleAssignee(userId, task.getProject().getId(), tenantId);
 
+        UUID previousAssigneeId = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
         task.setAssignedTo(assignee);
         Task updatedTask = taskRepository.save(task);
+        publishTaskChanged(updatedTask, previousAssigneeId, "ASSIGNED");
         return taskMapper.toResponse(updatedTask);
     }
 
@@ -211,9 +230,24 @@ public class TaskService extends TenantAwareService {
         User actor = loadActor(currentUserId, tenantId);
         TaskAccessPolicy.requireUnassignAccess(task, actor);
 
+        UUID previousAssigneeId = task.getAssignedTo() != null ? task.getAssignedTo().getId() : null;
         task.setAssignedTo(null);
         Task updatedTask = taskRepository.save(task);
+        publishTaskChanged(updatedTask, previousAssigneeId, "UNASSIGNED");
         return taskMapper.toResponse(updatedTask);
+    }
+
+    private void publishTaskChanged(Task task, UUID previousAssigneeId, String changeType) {
+        eventPublisher.publishEvent(new TaskChangedEvent(
+                this,
+                task.getId(),
+                task.getProject().getId(),
+                task.getProject().getOwner().getId(),
+                task.getAssignedTo() != null ? task.getAssignedTo().getId() : null,
+                previousAssigneeId,
+                task.getStatus(),
+                changeType
+        ));
     }
 
     private User loadActor(UUID currentUserId, String tenantId) {

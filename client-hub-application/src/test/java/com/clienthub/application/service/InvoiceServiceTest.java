@@ -1,12 +1,15 @@
 package com.clienthub.application.service;
 
 import com.clienthub.application.mapper.InvoiceMapper;
+import com.clienthub.application.dto.invoice.InvoiceRequest;
 import com.clienthub.application.dto.invoice.InvoiceResponse;
 import com.clienthub.application.exception.InvalidInvoiceStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
+import com.clienthub.application.exception.ProjectBudgetExceededException;
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.Invoice;
 import com.clienthub.domain.entity.Project;
+import com.clienthub.domain.entity.ProjectMember;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.InvoiceStatus;
 import com.clienthub.domain.enums.PaymentMethod;
@@ -17,7 +20,9 @@ import com.clienthub.domain.repository.ProjectRepository;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.domain.repository.AuditLogRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.Test;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
@@ -104,6 +109,118 @@ class InvoiceServiceTest {
 
         assertEquals("Crypto escrow invoice status is managed by blockchain events", exception.getMessage());
         verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void createCryptoInvoice_WhenClientWalletIsMissing_ShouldRejectBeforePersistence() {
+        User client = createUser(CLIENT_ID, Role.CLIENT, "client@example.com");
+        User freelancer = createUser(FREELANCER_ID, Role.FREELANCER, "freelancer@example.com");
+        Project project = new Project();
+        project.setId(PROJECT_ID);
+        project.setTenantId(TENANT_ID);
+        project.setOwner(client);
+        ProjectMember membership = new ProjectMember();
+        membership.setUser(freelancer);
+
+        InvoiceRequest request = new InvoiceRequest();
+        request.setProjectId(PROJECT_ID);
+        request.setTitle("Escrow invoice");
+        request.setAmount(BigInteger.valueOf(1000));
+        request.setPaymentMethod(PaymentMethod.CRYPTO_ESCROW);
+        request.setFreelancerWalletAddress("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+
+        ReflectionTestUtils.setField(invoiceService, "blockchainEnabled", true);
+        when(projectRepository.findByIdAndTenantIdForUpdate(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(client));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of(membership));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invoiceService.createInvoice(request, CLIENT_ID));
+
+        assertEquals(
+                "Bind a valid client wallet in Settings before creating a crypto escrow invoice",
+                exception.getMessage());
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void createCryptoInvoice_WhenFreelancerWalletMatchesClient_ShouldRejectBeforePersistence() {
+        String clientWallet = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+        User client = createUser(CLIENT_ID, Role.CLIENT, "client@example.com");
+        client.setWalletAddress(clientWallet);
+        User freelancer = createUser(FREELANCER_ID, Role.FREELANCER, "freelancer@example.com");
+        Project project = new Project();
+        project.setId(PROJECT_ID);
+        project.setTenantId(TENANT_ID);
+        project.setOwner(client);
+        ProjectMember membership = new ProjectMember();
+        membership.setUser(freelancer);
+
+        InvoiceRequest request = new InvoiceRequest();
+        request.setProjectId(PROJECT_ID);
+        request.setTitle("Self-paying escrow invoice");
+        request.setAmount(BigInteger.valueOf(1000));
+        request.setPaymentMethod(PaymentMethod.CRYPTO_ESCROW);
+        request.setFreelancerWalletAddress(clientWallet.toLowerCase());
+
+        ReflectionTestUtils.setField(invoiceService, "blockchainEnabled", true);
+        when(projectRepository.findByIdAndTenantIdForUpdate(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(client));
+        when(projectMemberRepository.findByIdProjectIdAndTenantId(PROJECT_ID, TENANT_ID))
+                .thenReturn(List.of(membership));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> invoiceService.createInvoice(request, CLIENT_ID));
+
+        assertEquals(
+                "Freelancer wallet must be different from the bound client wallet",
+                exception.getMessage());
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+    }
+
+    @Test
+    void createInvoice_WhenCommittedTotalWouldExceedProjectBudget_ShouldRejectBeforePersistence() {
+        User client = createUser(CLIENT_ID, Role.CLIENT, "client@example.com");
+        Project project = new Project();
+        project.setId(PROJECT_ID);
+        project.setTenantId(TENANT_ID);
+        project.setOwner(client);
+        project.setBudget(new BigDecimal("10000.00"));
+
+        InvoiceRequest request = new InvoiceRequest();
+        request.setProjectId(PROJECT_ID);
+        request.setTitle("Over-budget invoice");
+        request.setAmount(BigInteger.valueOf(2000));
+        request.setPaymentMethod(PaymentMethod.FIAT);
+
+        when(projectRepository.findByIdAndTenantIdForUpdate(PROJECT_ID, TENANT_ID))
+                .thenReturn(Optional.of(project));
+        when(userRepository.findByIdAndTenantId(CLIENT_ID, TENANT_ID))
+                .thenReturn(Optional.of(client));
+        when(invoiceRepository.sumAmountByProjectIdAndTenantIdAndStatusNot(
+                PROJECT_ID, TENANT_ID, InvoiceStatus.REFUNDED))
+                .thenReturn(BigInteger.valueOf(9000));
+
+        ProjectBudgetExceededException exception = assertThrows(
+                ProjectBudgetExceededException.class,
+                () -> invoiceService.createInvoice(request, CLIENT_ID));
+
+        assertEquals(
+                "Project budget exceeded. Remaining budget is $1000.00, but this invoice requests $2000.00.",
+                exception.getMessage());
+        assertEquals("10000.00", exception.getBudget());
+        assertEquals("9000.00", exception.getCommitted());
+        assertEquals("2000.00", exception.getRequested());
+        assertEquals("1000.00", exception.getRemaining());
+        verify(invoiceRepository, never()).save(any(Invoice.class));
+        verifyNoInteractions(projectMemberRepository);
     }
 
     @Test

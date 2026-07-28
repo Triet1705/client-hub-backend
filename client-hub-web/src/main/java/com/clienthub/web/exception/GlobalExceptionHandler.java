@@ -4,6 +4,9 @@ import com.clienthub.application.exception.InvalidInvoiceStateException;
 import com.clienthub.application.exception.InvalidTaskStateException;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.TaskNotFoundException;
+import com.clienthub.application.exception.WalletAlreadyBoundException;
+import com.clienthub.application.exception.ProjectBudgetExceededException;
+import com.clienthub.application.exception.UnsafeImpersonationTargetException;
 import com.clienthub.web.dto.common.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +18,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -90,6 +94,50 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(WalletAlreadyBoundException.class)
+    public ResponseEntity<ErrorResponse> handleWalletAlreadyBound(WalletAlreadyBoundException ex) {
+        log.warn("Wallet binding conflict: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "Wallet Already Bound",
+                ex.getMessage(),
+                HttpStatus.CONFLICT.value()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    @ExceptionHandler(ProjectBudgetExceededException.class)
+    public ResponseEntity<ErrorResponse> handleProjectBudgetExceeded(ProjectBudgetExceededException ex) {
+        log.warn("Project budget conflict: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "PROJECT_BUDGET_EXCEEDED",
+                ex.getMessage(),
+                HttpStatus.CONFLICT.value(),
+                List.of(
+                        "budget=" + ex.getBudget(),
+                        "committed=" + ex.getCommitted(),
+                        "requested=" + ex.getRequested(),
+                        "remaining=" + ex.getRemaining()
+                )
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    @ExceptionHandler(UnsafeImpersonationTargetException.class)
+    public ResponseEntity<ErrorResponse> handleUnsafeImpersonationTarget(
+            UnsafeImpersonationTargetException ex) {
+        log.warn("Unsafe impersonation target rejected: {}", ex.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                "IMPERSONATION_TARGET_UNAVAILABLE",
+                ex.getMessage(),
+                HttpStatus.CONFLICT.value()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
     @ExceptionHandler({
         InvalidTaskStateException.class,
         InvalidInvoiceStateException.class
@@ -116,6 +164,20 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value()
         );
 
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRequestParameter(
+            MissingServletRequestParameterException ex) {
+        log.warn("Missing request parameter: {}", ex.getParameterName());
+
+        ErrorResponse response = new ErrorResponse(
+                "Validation Failed",
+                "Required request parameter is missing: " + ex.getParameterName(),
+                HttpStatus.BAD_REQUEST.value(),
+                List.of(ex.getParameterName() + ": is required")
+        );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 

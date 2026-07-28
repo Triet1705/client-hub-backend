@@ -45,6 +45,31 @@ public class NotificationProducerService {
         );
     }
 
+    public void notifyTaskCreated(Task task, User actor) {
+        if (task == null || task.getProject() == null || actor == null) {
+            return;
+        }
+
+        User assignee = task.getAssignedTo();
+        User owner = task.getProject().getOwner();
+        User recipient = assignee != null && !assignee.getId().equals(actor.getId())
+                ? assignee
+                : owner;
+
+        if (recipient == null || recipient.getId().equals(actor.getId())) {
+            return;
+        }
+
+        createNotification(
+                recipient,
+                NotificationType.TASK_ASSIGNED,
+                task.getId().toString(),
+                "TASK",
+                String.format("Task '%s' was created by %s", task.getTitle(), actor.getFullName()),
+                task.getTenantId()
+        );
+    }
+
     public void notifyProjectCompleted(Project project) {
         String tenantId = project.getTenantId();
         Set<UUID> notifiedUserIds = new HashSet<>();

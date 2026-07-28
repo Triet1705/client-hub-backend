@@ -7,6 +7,7 @@ import com.clienthub.application.dto.user.ChangePasswordRequest;
 import com.clienthub.application.dto.user.CurrentUserResponse;
 import com.clienthub.application.dto.user.UpdateUserPreferencesRequest;
 import com.clienthub.application.dto.user.UpdateUserProfileRequest;
+import com.clienthub.application.exception.WalletAlreadyBoundException;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.entity.UserPreferences;
 import com.clienthub.domain.entity.UserProfile;
@@ -144,6 +145,11 @@ public class UserService {
         String tenantId = TenantContext.getTenantId();
         User user = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (userRepository.existsByWalletAddressIgnoreCaseAndIdNot(walletAddress, userId)) {
+            throw new WalletAlreadyBoundException();
+        }
+
         user.setWalletAddress(walletAddress);
         userRepository.save(user);
     }

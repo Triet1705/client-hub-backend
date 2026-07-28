@@ -20,19 +20,26 @@ import java.util.regex.Pattern;
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private static final Pattern INVOICE_STATUS_TOPIC = Pattern.compile("^/topic/invoices/(\\d+)/status$");
+    private static final Pattern PROJECT_TASK_TOPIC =
+            Pattern.compile("^/topic/projects/([0-9a-fA-F-]{36})/tasks$");
+    private static final Pattern USER_TASK_TOPIC =
+            Pattern.compile("^/topic/users/([0-9a-fA-F-]{36})/tasks$");
 
     @org.springframework.beans.factory.annotation.Value("${cors.allowed-origins:*}")
     private String[] allowedOrigins;
 
     private final com.clienthub.infrastructure.security.JwtTokenProvider jwtTokenProvider;
     private final com.clienthub.domain.repository.InvoiceRepository invoiceRepository;
+    private final com.clienthub.domain.repository.ProjectRepository projectRepository;
 
     public WebSocketConfig(
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             com.clienthub.infrastructure.security.JwtTokenProvider jwtTokenProvider,
-            com.clienthub.domain.repository.InvoiceRepository invoiceRepository) {
+            com.clienthub.domain.repository.InvoiceRepository invoiceRepository,
+            com.clienthub.domain.repository.ProjectRepository projectRepository) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.invoiceRepository = invoiceRepository;
+        this.projectRepository = projectRepository;
     }
 
     @Override
@@ -92,11 +99,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             return;
         }
 
-        Matcher matcher = INVOICE_STATUS_TOPIC.matcher(destination);
-        if (!matcher.matches()) {
-            return;
-        }
-
         Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
         if (sessionAttributes == null) {
             throw new org.springframework.messaging.MessageDeliveryException("Unauthorized");
@@ -108,13 +110,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             throw new org.springframework.messaging.MessageDeliveryException("Unauthorized");
         }
 
-        Long invoiceId = Long.valueOf(matcher.group(1));
         TenantContext.setTenantId(tenantId);
         boolean allowed;
         try {
-            allowed = "ADMIN".equals(role)
-                    ? invoiceRepository.existsByIdAndTenantId(invoiceId, tenantId)
-                    : invoiceRepository.existsAccessibleByIdAndTenantIdAndUserId(invoiceId, tenantId, userId);
+            Matcher invoiceMatcher = INVOICE_STATUS_TOPIC.matcher(destination);
+            Matcher projectMatcher = PROJECT_TASK_TOPIC.matcher(destination);
+            Matcher userMatcher = USER_TASK_TOPIC.matcher(destination);
+            if (invoiceMatcher.matches()) {
+                Long invoiceId = Long.valueOf(invoiceMatcher.group(1));
+                allowed = "ADMIN".equals(role)
+                        ? invoiceRepository.existsByIdAndTenantId(invoiceId, tenantId)
+                        : invoiceRepository.existsAccessibleByIdAndTenantIdAndUserId(invoiceId, tenantId, userId);
+            } else if (projectMatcher.matches()) {
+                UUID projectId = UUID.fromString(projectMatcher.group(1));
+                allowed = "ADMIN".equals(role)
+                        ? projectRepository.existsByIdAndTenantId(projectId, tenantId)
+                        : "CLIENT".equals(role)
+                        && projectRepository.existsByIdAndTenantIdAndOwnerId(projectId, tenantId, userId);
+            } else if (userMatcher.matches()) {
+                allowed = userId.equals(UUID.fromString(userMatcher.group(1)));
+            } else {
+                throw new org.springframework.messaging.MessageDeliveryException(
+                        "Unsupported subscription destination");
+            }
         } finally {
             TenantContext.clear();
         }

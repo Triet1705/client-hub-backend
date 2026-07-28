@@ -31,6 +31,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -72,6 +73,8 @@ class TaskServiceTest {
     private TaskMapper taskMapper;
     @Mock
     private NotificationProducerService notificationProducerService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private TaskService taskService;
@@ -109,6 +112,7 @@ class TaskServiceTest {
         assertSame(response, taskService.createTask(request, OWNER_ID));
         assertSame(project, task.getProject());
         assertSame(assignee, task.getAssignedTo());
+        verify(notificationProducerService).notifyTaskCreated(task, owner);
     }
 
     @Test
@@ -133,6 +137,7 @@ class TaskServiceTest {
 
         assertSame(freelancer, task.getAssignedTo());
         verify(taskRepository).save(task);
+        verify(notificationProducerService).notifyTaskCreated(task, freelancer);
     }
 
     @Test
