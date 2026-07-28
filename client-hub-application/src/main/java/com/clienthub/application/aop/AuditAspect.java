@@ -1,6 +1,7 @@
 package com.clienthub.application.aop;
 
 import com.clienthub.application.service.AuditService;
+import com.clienthub.infrastructure.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -21,10 +22,12 @@ public class AuditAspect {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditAspect.class);
     private final AuditService auditService;
+    private final ClientIpResolver clientIpResolver;
     private final ExpressionParser parser = new SpelExpressionParser();
 
-    public AuditAspect(AuditService auditService) {
+    public AuditAspect(AuditService auditService, ClientIpResolver clientIpResolver) {
         this.auditService = auditService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @AfterReturning(pointcut = "@annotation(logAudit)", returning = "result")
@@ -53,11 +56,7 @@ public class AuditAspect {
             ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attributes != null) {
                 HttpServletRequest request = attributes.getRequest();
-                String xForwardedFor = request.getHeader("X-Forwarded-For");
-                if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-                    return xForwardedFor.split(",")[0].trim();
-                }
-                return request.getRemoteAddr();
+                return clientIpResolver.resolve(request);
             }
         } catch (Exception e) {
             logger.warn("Could not determine client IP address: {}", e.getMessage());

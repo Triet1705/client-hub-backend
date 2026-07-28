@@ -78,6 +78,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/system/config").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         // SockJS performs an unauthenticated HTTP transport handshake.
                         // The STOMP CONNECT frame is authenticated in WebSocketConfig.
                         .requestMatchers("/ws/**").permitAll()

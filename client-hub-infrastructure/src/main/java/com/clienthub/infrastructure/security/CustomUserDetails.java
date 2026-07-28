@@ -98,7 +98,10 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return active;
+        // Timed account lockout is enforced by CustomAuthenticationProvider.
+        // Keep activation state mapped only to isEnabled() so inactive users
+        // produce DisabledException instead of an unhandled LockedException.
+        return true;
     }
 
     @Override

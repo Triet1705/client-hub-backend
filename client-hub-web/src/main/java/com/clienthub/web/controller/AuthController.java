@@ -9,6 +9,7 @@ import com.clienthub.application.dto.JwtResponse;
 import com.clienthub.application.exception.TokenRefreshException;
 import com.clienthub.infrastructure.security.CustomUserDetails;
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.infrastructure.security.ClientIpResolver;
 import com.clienthub.application.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -46,6 +47,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final ClientIpResolver clientIpResolver;
 
     @Value("${jwt.expiration:900000}")
     private long jwtExpirationMs;
@@ -65,11 +67,13 @@ public class AuthController {
     public AuthController(
             AuthenticationManager authenticationManager,
             AuthService authService,
-            JwtTokenProvider jwtTokenProvider
+            JwtTokenProvider jwtTokenProvider,
+            ClientIpResolver clientIpResolver
     ) {
         this.authenticationManager = authenticationManager;
         this.authService = authService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.clientIpResolver = clientIpResolver;
     }
 
     /**
@@ -107,7 +111,7 @@ public class AuthController {
             );
             User user = authService.getUserByEmail(userDetails.getEmail(), userDetails.getTenantId());
 
-            String ipAddress = request.getRemoteAddr();
+            String ipAddress = clientIpResolver.resolve(request);
             String userAgent = request.getHeader("User-Agent");
 
             RefreshToken refreshTokenEntity = authService.createRefreshTokenForUser(user, ipAddress, userAgent);
@@ -234,7 +238,7 @@ public class AuthController {
                                           @CookieValue(value = "refresh_token", required = false) String refreshTokenCookie,
                                           HttpServletRequest servletRequest) {
         try {
-            String ipAddress = servletRequest.getRemoteAddr();
+            String ipAddress = clientIpResolver.resolve(servletRequest);
             String userAgent = servletRequest.getHeader("User-Agent");
             String refreshToken = resolveRefreshToken(refreshTokenRequest, refreshTokenCookie);
 

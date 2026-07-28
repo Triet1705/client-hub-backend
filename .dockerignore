@@ -30,6 +30,16 @@ app.log
 .env.*
 .env.local
 .env.*.local
+**/application-prod.properties
+**/application-*-local.properties
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+**/secrets/
 
 # Documentation
 *.md

@@ -3,6 +3,7 @@ package com.clienthub.application.aop;
 import com.clienthub.domain.enums.AuditAction;
 import com.clienthub.application.dto.task.TaskResponse;
 import com.clienthub.application.service.AuditService;
+import com.clienthub.infrastructure.security.ClientIpResolver;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,8 +34,9 @@ class AuditAspectTest {
     @Mock
     private MethodSignature methodSignature;
 
-    @InjectMocks
-    private AuditAspect auditAspect;
+    @Mock private ClientIpResolver clientIpResolver;
+
+    @InjectMocks private AuditAspect auditAspect;
 
     private LogAudit logAudit;
     private UUID taskId;
@@ -45,6 +47,7 @@ class AuditAspectTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRemoteAddr("127.0.0.1");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        when(clientIpResolver.resolve(any())).thenReturn("127.0.0.1");
     }
 
     @Test

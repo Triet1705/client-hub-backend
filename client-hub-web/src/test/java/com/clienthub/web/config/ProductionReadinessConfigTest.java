@@ -26,6 +26,37 @@ class ProductionReadinessConfigTest {
     }
 
     @Test
+    void runAcceptsWeb2OnlyValuesWhenOptionalServicesDisabled() {
+        ProductionReadinessConfig config = new ProductionReadinessConfig();
+        setRequiredFields(config);
+        ReflectionTestUtils.setField(config, "minioAccessKey", "");
+        ReflectionTestUtils.setField(config, "minioSecretKey", "");
+        ReflectionTestUtils.setField(config, "redisPassword", "");
+
+        assertDoesNotThrow(() -> config.run(null));
+    }
+
+    @Test
+    void runRequiresRedisSecretWhenCacheEnabled() {
+        ProductionReadinessConfig config = new ProductionReadinessConfig();
+        setRequiredFields(config);
+        ReflectionTestUtils.setField(config, "cacheType", "redis");
+        ReflectionTestUtils.setField(config, "redisPassword", "");
+
+        assertThrows(IllegalStateException.class, () -> config.run(null));
+    }
+
+    @Test
+    void runRequiresMinioSecretsWhenAiEnabled() {
+        ProductionReadinessConfig config = new ProductionReadinessConfig();
+        setRequiredFields(config);
+        ReflectionTestUtils.setField(config, "aiEnabled", true);
+        ReflectionTestUtils.setField(config, "minioAccessKey", "");
+
+        assertThrows(IllegalStateException.class, () -> config.run(null));
+    }
+
+    @Test
     void runRequiresBlockchainSettingsWhenBlockchainEnabled() {
         ProductionReadinessConfig config = new ProductionReadinessConfig();
         setRequiredFields(config);
@@ -47,9 +78,13 @@ class ProductionReadinessConfigTest {
     private static void setRequiredFields(ProductionReadinessConfig config) {
         ReflectionTestUtils.setField(config, "jwtSecret", "production-secret-value-at-least-32-chars");
         ReflectionTestUtils.setField(config, "datasourcePassword", "db-secret");
+        ReflectionTestUtils.setField(config, "datasourceUsername", "clienthub_runtime");
+        ReflectionTestUtils.setField(config, "flywayUsername", "clienthub_migration");
         ReflectionTestUtils.setField(config, "minioAccessKey", "minio-user");
         ReflectionTestUtils.setField(config, "minioSecretKey", "minio-secret");
         ReflectionTestUtils.setField(config, "redisPassword", "redis-secret");
+        ReflectionTestUtils.setField(config, "cacheType", "none");
+        ReflectionTestUtils.setField(config, "aiEnabled", false);
         ReflectionTestUtils.setField(config, "allowedOrigins", "https://clienthub.example.com");
         ReflectionTestUtils.setField(config, "tenantHeaderRequired", true);
         ReflectionTestUtils.setField(config, "blockchainEnabled", false);

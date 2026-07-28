@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
+    private final ClientIpResolver clientIpResolver;
     private final Map<String, FixedWindowCounter> buckets = new ConcurrentHashMap<>();
     private final Duration windowDuration = Duration.ofMinutes(1);
 
@@ -35,8 +36,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Value("${rate-limit.general:60}")
     private int generalLimit;
 
-    public RateLimitFilter(JwtTokenProvider tokenProvider) {
+    public RateLimitFilter(JwtTokenProvider tokenProvider, ClientIpResolver clientIpResolver) {
         this.tokenProvider = tokenProvider;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
@@ -83,11 +85,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String getClientIP(HttpServletRequest request) {
-        String xfHeader = request.getHeader("X-Forwarded-For");
-        if (xfHeader == null) {
-            return request.getRemoteAddr();
-        }
-        return xfHeader.split(",")[0];
+        return clientIpResolver.resolve(request);
     }
 
     private String resolveUserIdOrIp(HttpServletRequest request) {

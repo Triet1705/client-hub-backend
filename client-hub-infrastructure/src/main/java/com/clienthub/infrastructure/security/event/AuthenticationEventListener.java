@@ -3,6 +3,7 @@ package com.clienthub.infrastructure.security.event;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.repository.UserRepository;
 import com.clienthub.infrastructure.security.CustomUserDetails;
+import com.clienthub.infrastructure.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +25,12 @@ public class AuthenticationEventListener {
     private static final Logger auditLog = LoggerFactory.getLogger("AUDIT_LOG");
 
     private final UserRepository userRepository;
+    private final ClientIpResolver clientIpResolver;
 
-    public AuthenticationEventListener(UserRepository userRepository) {
+    public AuthenticationEventListener(
+            UserRepository userRepository, ClientIpResolver clientIpResolver) {
         this.userRepository = userRepository;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @EventListener
@@ -79,32 +83,6 @@ public class AuthenticationEventListener {
         }
 
         HttpServletRequest request = attributes.getRequest();
-        
-        String[] headers = {
-            "X-Forwarded-For",
-            "Proxy-Client-IP",
-            "WL-Proxy-Client-IP",
-            "HTTP_X_FORWARDED_FOR",
-            "HTTP_X_FORWARDED",
-            "HTTP_X_CLUSTER_CLIENT_IP",
-            "HTTP_CLIENT_IP",
-            "HTTP_FORWARDED_FOR",
-            "HTTP_FORWARDED",
-            "HTTP_VIA",
-            "REMOTE_ADDR"
-        };
-
-        for (String header : headers) {
-            String ip = request.getHeader(header);
-            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
-                if (ip.contains(",")) {
-                    ip = ip.split(",")[0].trim();
-                }
-                return ip;
-            }
-        }
-
-        String remoteAddr = request.getRemoteAddr();
-        return remoteAddr != null ? remoteAddr : "UNKNOWN";
+        return clientIpResolver.resolve(request);
     }
 }

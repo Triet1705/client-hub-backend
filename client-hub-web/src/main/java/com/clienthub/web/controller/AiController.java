@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/ai")
 @Tag(name = "AI Services", description = "Endpoints for AI-powered features")
+@ConditionalOnProperty(name = "ai.enabled", havingValue = "true", matchIfMissing = true)
 public class AiController {
 
     private final AiTaskService aiTaskService;

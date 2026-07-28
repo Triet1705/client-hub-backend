@@ -1,6 +1,7 @@
 package com.clienthub.web.security;
 
 import com.clienthub.infrastructure.security.JwtTokenProvider;
+import com.clienthub.infrastructure.security.ClientIpResolver;
 import com.clienthub.infrastructure.security.RateLimitFilter;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,10 +30,12 @@ public class RateLimitFilterTest {
     private FilterChain filterChain;
 
     private RateLimitFilter rateLimitFilter;
+    private ClientIpResolver clientIpResolver;
 
     @BeforeEach
     void setUp() {
-        rateLimitFilter = new RateLimitFilter(jwtTokenProvider);
+        clientIpResolver = new ClientIpResolver("10.0.0.0/8");
+        rateLimitFilter = new RateLimitFilter(jwtTokenProvider, clientIpResolver);
         ReflectionTestUtils.setField(rateLimitFilter, "loginLimit", 5);
         ReflectionTestUtils.setField(rateLimitFilter, "registerLimit", 3);
         ReflectionTestUtils.setField(rateLimitFilter, "aiLimit", 10);
@@ -104,6 +107,32 @@ public class RateLimitFilterTest {
         rateLimitFilter.doFilter(request2, response2, filterChain);
 
         assertTrue(buckets.containsKey("ai:" + userId));
+    }
+
+    @Test
+    void directClientCannotSpoofForwardedAddress() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/auth/login");
+        request.setMethod("POST");
+        request.setRemoteAddr("203.0.113.10");
+        request.addHeader("X-Forwarded-For", "198.51.100.99");
+
+        rateLimitFilter.doFilter(request, new MockHttpServletResponse(), filterChain);
+
+        assertTrue(getBuckets().containsKey("login:203.0.113.10"));
+    }
+
+    @Test
+    void trustedProxyResolvesForwardedClientAddress() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/auth/login");
+        request.setMethod("POST");
+        request.setRemoteAddr("10.0.0.5");
+        request.addHeader("X-Forwarded-For", "198.51.100.99");
+
+        rateLimitFilter.doFilter(request, new MockHttpServletResponse(), filterChain);
+
+        assertTrue(getBuckets().containsKey("login:198.51.100.99"));
     }
 
     @SuppressWarnings("unchecked")
