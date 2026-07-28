@@ -18,6 +18,12 @@ public class ProductionReadinessConfig implements ApplicationRunner {
     @Value("${spring.datasource.password:}")
     private String datasourcePassword;
 
+    @Value("${spring.datasource.username:}")
+    private String datasourceUsername;
+
+    @Value("${spring.flyway.user:}")
+    private String flywayUsername;
+
     @Value("${minio.access-key:}")
     private String minioAccessKey;
 
@@ -57,6 +63,18 @@ public class ProductionReadinessConfig implements ApplicationRunner {
 
         require(jwtSecret.length() >= 32, failures, "jwt.secret must be set to a strong production value");
         rejectDefault(datasourcePassword, "postgres", failures, "spring.datasource.password must not use the dev default");
+        require(
+                !datasourceUsername.isBlank(),
+                failures,
+                "spring.datasource.username must identify the restricted runtime role");
+        require(
+                !flywayUsername.isBlank(),
+                failures,
+                "spring.flyway.user must identify the migration role");
+        require(
+                !datasourceUsername.equals(flywayUsername),
+                failures,
+                "migration and runtime database users must be different");
         if (aiEnabled) {
             rejectDefault(
                     minioAccessKey,

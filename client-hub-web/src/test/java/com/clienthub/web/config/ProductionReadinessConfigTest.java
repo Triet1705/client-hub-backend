@@ -78,6 +78,8 @@ class ProductionReadinessConfigTest {
     private static void setRequiredFields(ProductionReadinessConfig config) {
         ReflectionTestUtils.setField(config, "jwtSecret", "production-secret-value-at-least-32-chars");
         ReflectionTestUtils.setField(config, "datasourcePassword", "db-secret");
+        ReflectionTestUtils.setField(config, "datasourceUsername", "clienthub_runtime");
+        ReflectionTestUtils.setField(config, "flywayUsername", "clienthub_migration");
         ReflectionTestUtils.setField(config, "minioAccessKey", "minio-user");
         ReflectionTestUtils.setField(config, "minioSecretKey", "minio-secret");
         ReflectionTestUtils.setField(config, "redisPassword", "redis-secret");

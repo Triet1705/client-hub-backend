@@ -161,6 +161,14 @@ class AuthRestrictedRlsIntegrationTest {
             assertFalse(role.path("superuser").asBoolean());
             assertFalse(role.path("bypassRls").asBoolean());
 
+            ResultSet legacyRole = statement.executeQuery("""
+                    SELECT rolcanlogin
+                    FROM pg_roles
+                    WHERE rolname = 'clienthub_app'
+                    """);
+            assertTrue(legacyRole.next());
+            assertFalse(legacyRole.getBoolean("rolcanlogin"));
+
             ResultSet forcedRls = statement.executeQuery("""
                     SELECT count(*) = 3 AND bool_and(relrowsecurity AND relforcerowsecurity)
                     FROM pg_class
