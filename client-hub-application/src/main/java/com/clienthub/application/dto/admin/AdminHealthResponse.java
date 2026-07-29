@@ -23,7 +23,7 @@ public record AdminHealthResponse(
                 database,
                 redis,
                 aiEngine,
-                new ComponentHealth("UP", "Not configured", 0),
+                new ComponentHealth("DISABLED", "Not configured", null, false, false),
                 JvmVitals.current(),
                 0,
                 Instant.now());
