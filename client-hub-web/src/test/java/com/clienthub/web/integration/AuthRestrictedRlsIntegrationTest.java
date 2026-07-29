@@ -115,9 +115,21 @@ class AuthRestrictedRlsIntegrationTest {
         register("tenant-beta", BETA_PASSWORD);
 
         login("tenant-alpha", "WrongPass9!")
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Invalid Credentials"))
+                .andExpect(jsonPath("$.message").value(
+                        "Email or password is incorrect for this workspace."));
         login("tenant-beta", ALPHA_PASSWORD)
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Invalid Credentials"))
+                .andExpect(jsonPath("$.message").value(
+                        "Email or password is incorrect for this workspace."));
+
+        login("missing-workspace", ALPHA_PASSWORD)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Workspace Not Found"))
+                .andExpect(jsonPath("$.message").value(
+                        "No workspace exists for this Tenant ID."));
 
         login("tenant-beta", BETA_PASSWORD)
                 .andExpect(status().isOk())

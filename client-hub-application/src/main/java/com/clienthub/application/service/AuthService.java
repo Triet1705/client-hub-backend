@@ -163,6 +163,11 @@ public class AuthService {
         return userRepository.existsByEmailAndTenantId(email, resolveRequiredTenantId(tenantId));
     }
 
+    @Transactional(readOnly = true)
+    public boolean tenantExists(String tenantId) {
+        return tenantRepository.existsById(resolveRequiredTenantId(tenantId));
+    }
+
     private String resolveRequiredTenantId(String tenantId) {
         String resolvedTenantId;
         if (tenantId != null && !tenantId.isBlank()) {
