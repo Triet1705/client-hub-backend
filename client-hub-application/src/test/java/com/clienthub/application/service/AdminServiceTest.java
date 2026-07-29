@@ -3,6 +3,7 @@ package com.clienthub.application.service;
 import com.clienthub.application.dto.admin.AdminEventItem;
 import com.clienthub.application.dto.admin.AdminFeatureFlag;
 import com.clienthub.application.dto.admin.AdminControlCenterResponse;
+import com.clienthub.application.dto.admin.AdminHealthResponse;
 import com.clienthub.application.exception.ResourceNotFoundException;
 import com.clienthub.application.exception.UnsafeImpersonationTargetException;
 import com.clienthub.common.context.TenantContext;
@@ -19,6 +20,7 @@ import com.clienthub.infrastructure.security.JwtTokenProvider;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -35,11 +37,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +55,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -232,6 +239,8 @@ class AdminServiceTest {
         ReflectionTestUtils.setField(adminService, "blockchainContractAddress", "0x123");
         ReflectionTestUtils.setField(adminService, "ollamaUrl", "http://localhost:11434");
         ReflectionTestUtils.setField(adminService, "ollamaModel", "llama3.2:3b");
+        ReflectionTestUtils.setField(adminService, "aiEnabled", true);
+        ReflectionTestUtils.setField(adminService, "cacheType", "redis");
         ReflectionTestUtils.setField(adminService, "tenantHeaderRequired", true);
         ReflectionTestUtils.setField(adminService, "rlsEnabled", true);
         ReflectionTestUtils.setField(adminService, "loginRateLimit", 5);
@@ -239,14 +248,96 @@ class AdminServiceTest {
 
         List<AdminFeatureFlag> flags = adminService.getFeatureFlags();
 
-        assertEquals(7, flags.size());
+        assertEquals(8, flags.size());
         assertTrue(flags.stream().anyMatch(flag ->
                 flag.key().equals("blockchain-workflows") && flag.enabled() && flag.status().equals("READY")));
+        assertTrue(flags.stream().anyMatch(flag ->
+                flag.key().equals("ai-extraction") && flag.enabled() && flag.status().equals("CONFIGURED")));
+        assertTrue(flags.stream().anyMatch(flag ->
+                flag.key().equals("redis-cache") && flag.enabled() && flag.status().equals("ACTIVE")));
         assertTrue(flags.stream().anyMatch(flag ->
                 flag.key().equals("tenant-header-required") && flag.status().equals("ENFORCED")));
         assertTrue(flags.stream().anyMatch(flag ->
                 flag.key().equals("auth-rate-limits") && flag.enabled() && flag.status().equals("ACTIVE")));
         assertTrue(flags.stream().allMatch(flag -> flag.source() != null && !flag.source().isBlank()));
+    }
+
+    @Test
+    @DisplayName("Disabled optional dependencies are reported without probes or false degradation")
+    void getSystemHealth_ShouldIgnoreDisabledOptionalDependencies() {
+        ReflectionTestUtils.setField(adminService, "cacheType", "none");
+        ReflectionTestUtils.setField(adminService, "aiEnabled", false);
+        ReflectionTestUtils.setField(adminService, "blockchainEnabled", false);
+        ReflectionTestUtils.setField(adminService, "restTemplate", restTemplate);
+
+        AdminHealthResponse response = adminService.getSystemHealth();
+
+        assertEquals("UP", response.overallStatus());
+        assertEquals("UP", response.database().status());
+        assertTrue(response.database().enabled());
+        assertTrue(response.database().required());
+        assertEquals("DISABLED", response.redis().status());
+        assertEquals("DISABLED", response.aiEngine().status());
+        assertEquals("DISABLED", response.blockchain().status());
+        assertFalse(response.redis().enabled());
+        assertNull(response.redis().latencyMs());
+        assertNull(response.aiEngine().latencyMs());
+        assertNull(response.blockchain().latencyMs());
+        List<AdminFeatureFlag> flags = adminService.getFeatureFlags();
+        assertTrue(flags.stream().anyMatch(flag ->
+                flag.key().equals("redis-cache") && !flag.enabled() && flag.status().equals("DISABLED")));
+        assertTrue(flags.stream().anyMatch(flag ->
+                flag.key().equals("ai-extraction") && !flag.enabled() && flag.status().equals("DISABLED")));
+        assertTrue(flags.stream().anyMatch(flag ->
+                flag.key().equals("blockchain-workflows") && !flag.enabled() && flag.status().equals("DISABLED")));
+        verifyNoInteractions(redisTemplate, restTemplate);
+    }
+
+    @Test
+    @DisplayName("Enabled optional dependency outages degrade but do not stop Web2 core")
+    void getSystemHealth_ShouldDegradeWhenEnabledOptionalDependenciesAreDown() {
+        ReflectionTestUtils.setField(adminService, "cacheType", "redis");
+        ReflectionTestUtils.setField(adminService, "aiEnabled", true);
+        ReflectionTestUtils.setField(adminService, "ollamaUrl", "http://localhost:11434");
+        ReflectionTestUtils.setField(adminService, "blockchainEnabled", false);
+        ReflectionTestUtils.setField(adminService, "restTemplate", restTemplate);
+        when(redisTemplate.getConnectionFactory()).thenThrow(new IllegalStateException("offline"));
+        when(restTemplate.getForEntity(anyString(), eq(String.class)))
+                .thenThrow(new IllegalStateException("offline"));
+
+        AdminHealthResponse response = adminService.getSystemHealth();
+
+        assertEquals("DEGRADED", response.overallStatus());
+        assertEquals("DOWN", response.redis().status());
+        assertEquals("DOWN", response.aiEngine().status());
+        assertTrue(response.redis().enabled());
+        assertTrue(response.aiEngine().enabled());
+        assertFalse(response.redis().required());
+        assertFalse(response.aiEngine().required());
+    }
+
+    @Test
+    @DisplayName("Enabled blockchain health performs a real RPC probe")
+    void getSystemHealth_ShouldMeasureBlockchainRpcLatency() {
+        ReflectionTestUtils.setField(adminService, "cacheType", "none");
+        ReflectionTestUtils.setField(adminService, "aiEnabled", false);
+        ReflectionTestUtils.setField(adminService, "blockchainEnabled", true);
+        ReflectionTestUtils.setField(adminService, "blockchainNodeUrl", "https://rpc.example");
+        ReflectionTestUtils.setField(adminService, "blockchainContractAddress", "0x123");
+        ReflectionTestUtils.setField(adminService, "restTemplate", restTemplate);
+        when(restTemplate.postForEntity(
+                eq("https://rpc.example"),
+                any(Map.class),
+                eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("jsonrpc", "2.0", "id", 1, "result", "0x13882")));
+
+        AdminHealthResponse response = adminService.getSystemHealth();
+
+        assertEquals("UP", response.overallStatus());
+        assertEquals("UP", response.blockchain().status());
+        assertEquals("RPC reachable", response.blockchain().label());
+        assertTrue(response.blockchain().enabled());
+        assertNotNull(response.blockchain().latencyMs());
     }
 
     @Test
@@ -290,6 +381,8 @@ class AdminServiceTest {
     void getControlCenter_ShouldAggregateSummaryAndAlerts() {
         ReflectionTestUtils.setField(adminService, "ollamaUrl", "http://localhost:11434");
         ReflectionTestUtils.setField(adminService, "ollamaModel", "llama3.2:3b");
+        ReflectionTestUtils.setField(adminService, "aiEnabled", true);
+        ReflectionTestUtils.setField(adminService, "cacheType", "none");
         ReflectionTestUtils.setField(adminService, "restTemplate", restTemplate);
 
         when(restTemplate.getForEntity(anyString(), eq(String.class))).thenThrow(new RuntimeException("offline"));

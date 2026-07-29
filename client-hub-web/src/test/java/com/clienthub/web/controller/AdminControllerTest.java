@@ -76,8 +76,14 @@ public class AdminControllerTest {
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.overallStatus").isString())
-                .andExpect(jsonPath("$.database").exists())
-                .andExpect(jsonPath("$.redis").exists());
+                .andExpect(jsonPath("$.database.status").isString())
+                .andExpect(jsonPath("$.database.enabled").isBoolean())
+                .andExpect(jsonPath("$.database.required").isBoolean())
+                .andExpect(jsonPath("$.redis.status").isString())
+                .andExpect(jsonPath("$.redis.enabled").isBoolean())
+                .andExpect(jsonPath("$.redis.required").isBoolean())
+                .andExpect(jsonPath("$.aiEngine.enabled").isBoolean())
+                .andExpect(jsonPath("$.blockchain.enabled").isBoolean());
     }
 
     @Test
