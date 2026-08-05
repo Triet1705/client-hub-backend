@@ -47,6 +47,10 @@ public class TaskStatusNotifier {
                 "/topic/projects/" + event.getProjectId() + "/tasks",
                 message
         );
+        messagingTemplate.convertAndSend(
+                "/topic/tenants/" + event.getTenantId() + "/tasks",
+                message
+        );
         Set<UUID> recipients = new LinkedHashSet<>();
         recipients.add(event.getProjectOwnerId());
         if (event.getAssigneeId() != null) {

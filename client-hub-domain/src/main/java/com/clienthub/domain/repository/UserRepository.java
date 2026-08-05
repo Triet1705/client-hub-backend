@@ -46,7 +46,9 @@ public interface UserRepository extends JpaRepository<User, UUID>,
     @Query(value = "SELECT * FROM users", nativeQuery = true)
     List<User> findAllNative();
 
-    long countByLastLoginAtAfter(Instant lastLoginAt);
+    long countByTenantIdAndActiveTrue(String tenantId);
+
+    long countByTenantIdAndLastLoginAtAfter(String tenantId, Instant lastLoginAt);
 
     @Query("""
             SELECT u FROM User u

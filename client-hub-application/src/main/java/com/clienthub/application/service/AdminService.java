@@ -53,6 +53,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -91,6 +92,7 @@ public class AdminService extends TenantAwareService {
     private final JdbcTemplate jdbcTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
     private final RestTemplate restTemplate;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${ai.ollama.url:http://localhost:11434}")
     private String ollamaUrl;
@@ -136,7 +138,8 @@ public class AdminService extends TenantAwareService {
                         JwtTokenProvider jwtTokenProvider,
                         JdbcTemplate jdbcTemplate,
                         RedisTemplate<String, Object> redisTemplate,
-                        RestTemplateBuilder restTemplateBuilder) {
+                        RestTemplateBuilder restTemplateBuilder,
+                        PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.projectRepository = projectRepository;
         this.invoiceRepository = invoiceRepository;
@@ -145,6 +148,7 @@ public class AdminService extends TenantAwareService {
         this.jwtTokenProvider = jwtTokenProvider;
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
+        this.passwordEncoder = passwordEncoder;
         this.restTemplate = restTemplateBuilder.setConnectTimeout(Duration.ofSeconds(2))
                                                .setReadTimeout(Duration.ofSeconds(5))
                                                .build();
@@ -170,6 +174,30 @@ public class AdminService extends TenantAwareService {
         }
 
         return userRepository.findAll(spec, pageable).map(AdminUserResponse::from);
+    }
+
+    @Transactional
+    public AdminUserResponse createUser(String fullName, String email, String password, Role role) {
+        String tenantId = getCurrentTenantId();
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+        if (userRepository.existsByEmailAndTenantId(normalizedEmail, tenantId)) {
+            throw new IllegalArgumentException("A user with this email already exists in this workspace");
+        }
+
+        User user = User.builder()
+                .tenantId(tenantId)
+                .fullName(fullName.trim())
+                .email(normalizedEmail)
+                .password(passwordEncoder.encode(password))
+                .role(role)
+                .active(true)
+                .build();
+        User savedUser = userRepository.save(user);
+
+        logger.info("[AUDIT] Administrator created user: id={}, role={}, tenant={}",
+                savedUser.getId(), savedUser.getRole(), tenantId);
+        return AdminUserResponse.from(savedUser);
     }
 
     public AdminUserDetailResponse getUserDetail(UUID userId) {
@@ -218,9 +246,12 @@ public class AdminService extends TenantAwareService {
     }
 
     private ControlCenterSummary buildSummary(String systemStatus) {
+        String tenantId = getCurrentTenantId();
         return new ControlCenterSummary(
                 invoiceRepository.sumAmountByStatuses(List.of(InvoiceStatus.PAID)),
-                userRepository.countByLastLoginAtAfter(Instant.now().minus(Duration.ofHours(24))),
+                userRepository.countByTenantIdAndActiveTrue(tenantId),
+                userRepository.countByTenantIdAndLastLoginAtAfter(
+                        tenantId, Instant.now().minus(Duration.ofHours(24))),
                 projectRepository.countByStatusNotIn(CLOSED_PROJECT_STATUSES),
                 invoiceRepository.countByStatusNotIn(PAID_OR_REFUNDED_INVOICE_STATUSES),
                 systemStatus);

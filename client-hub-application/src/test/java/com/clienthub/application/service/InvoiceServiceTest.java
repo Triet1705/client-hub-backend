@@ -213,7 +213,7 @@ class InvoiceServiceTest {
                 () -> invoiceService.createInvoice(request, CLIENT_ID));
 
         assertEquals(
-                "Project budget exceeded. Remaining budget is $1000.00, but this invoice requests $2000.00.",
+                "This invoice is higher than the project's available budget. You can invoice up to $1,000.00.",
                 exception.getMessage());
         assertEquals("10000.00", exception.getBudget());
         assertEquals("9000.00", exception.getCommitted());

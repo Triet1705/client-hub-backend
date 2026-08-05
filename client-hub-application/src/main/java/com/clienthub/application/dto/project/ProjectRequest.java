@@ -8,6 +8,9 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class ProjectRequest {
 
@@ -24,6 +27,10 @@ public class ProjectRequest {
     private LocalDate deadline;
 
     private ProjectStatus status;
+
+    private UUID ownerId;
+
+    private List<UUID> memberIds = new ArrayList<>();
 
     public String getTitle() {
         return title;
@@ -63,5 +70,21 @@ public class ProjectRequest {
 
     public void setStatus(ProjectStatus status) {
         this.status = status;
+    }
+
+    public UUID getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(UUID ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public List<UUID> getMemberIds() {
+        return memberIds;
+    }
+
+    public void setMemberIds(List<UUID> memberIds) {
+        this.memberIds = memberIds == null ? new ArrayList<>() : memberIds;
     }
 }

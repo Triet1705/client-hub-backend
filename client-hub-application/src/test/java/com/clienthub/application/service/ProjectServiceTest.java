@@ -2,6 +2,7 @@ package com.clienthub.application.service;
 
 import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.Project;
+import com.clienthub.domain.entity.ProjectMember;
 import com.clienthub.domain.entity.User;
 import com.clienthub.domain.enums.ProjectStatus;
 import com.clienthub.domain.enums.Role;
@@ -91,7 +92,7 @@ class ProjectServiceTest {
         savedProject.setId(PROJECT_ID);
         savedProject.setStatus(ProjectStatus.PLANNING);
 
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.of(owner));
         when(projectMapper.toEntity(request)).thenReturn(projectEntity);
         when(projectRepository.save(any(Project.class))).thenReturn(savedProject);
         when(projectMapper.toResponse(savedProject)).thenReturn(new ProjectResponse());
@@ -100,7 +101,8 @@ class ProjectServiceTest {
 
         assertNotNull(response);
         verify(projectRepository).save(any(Project.class));
-        verify(userRepository).findById(USER_ID);
+        verify(userRepository).findByIdAndTenantId(USER_ID, TENANT_ID);
+        verify(userRepository, never()).findById(USER_ID);
     }
 
     @Test
@@ -638,13 +640,59 @@ class ProjectServiceTest {
     @Test
     @DisplayName("Security: Should prevent creating project for user in different tenant")
     void createProject_CrossTenantUser_ShouldThrowException() {
-        User crossTenantUser = createUser(USER_ID, "OTHER_TENANT");
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.empty());
 
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(crossTenantUser));
-
-        assertThrows(AccessDeniedException.class,
+        assertThrows(ResourceNotFoundException.class,
                 () -> projectService.createProject(new ProjectRequest(), USER_ID));
 
+        verify(projectRepository, never()).save(any());
+        verify(userRepository, never()).findById(USER_ID);
+    }
+
+    @Test
+    @DisplayName("Admin can select a tenant client owner and initial freelancer members")
+    void createProject_AdminOwnerAndMembers_ShouldBeTenantScoped() {
+        UUID ownerId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        User admin = createUser(USER_ID, TENANT_ID, Role.ADMIN);
+        User owner = createUser(ownerId, TENANT_ID, Role.CLIENT);
+        User member = createUser(memberId, TENANT_ID, Role.FREELANCER);
+        ProjectRequest request = new ProjectRequest();
+        request.setTitle("Admin project");
+        request.setOwnerId(ownerId);
+        request.setMemberIds(List.of(memberId));
+        Project entity = new Project();
+        entity.setTenantId(TENANT_ID);
+        Project saved = new Project();
+        saved.setId(PROJECT_ID);
+        saved.setTenantId(TENANT_ID);
+        saved.setStatus(ProjectStatus.PLANNING);
+
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.of(admin));
+        when(userRepository.findByIdAndTenantId(ownerId, TENANT_ID)).thenReturn(Optional.of(owner));
+        when(userRepository.findByIdAndTenantId(memberId, TENANT_ID)).thenReturn(Optional.of(member));
+        when(projectMapper.toEntity(request)).thenReturn(entity);
+        when(projectRepository.save(entity)).thenReturn(saved);
+        when(projectMapper.toResponse(saved)).thenReturn(new ProjectResponse());
+
+        ProjectResponse response = projectService.createProject(request, USER_ID, true);
+
+        assertNotNull(response);
+        assertEquals(owner, entity.getOwner());
+        verify(projectMemberRepository).save(any(ProjectMember.class));
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("Client cannot spoof another project owner")
+    void createProject_ClientOwnerSpoof_ShouldBeDenied() {
+        User client = createUser(USER_ID, TENANT_ID, Role.CLIENT);
+        ProjectRequest request = new ProjectRequest();
+        request.setOwnerId(UUID.randomUUID());
+        when(userRepository.findByIdAndTenantId(USER_ID, TENANT_ID)).thenReturn(Optional.of(client));
+
+        assertThrows(AccessDeniedException.class,
+                () -> projectService.createProject(request, USER_ID, false));
         verify(projectRepository, never()).save(any());
     }
 

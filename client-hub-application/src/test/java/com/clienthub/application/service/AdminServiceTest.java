@@ -39,6 +39,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -90,6 +91,9 @@ class AdminServiceTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
     private AdminService adminService;
 
     @BeforeEach
@@ -104,7 +108,8 @@ class AdminServiceTest {
                 jwtTokenProvider,
                 jdbcTemplate,
                 redisTemplate,
-                new RestTemplateBuilder());
+                new RestTemplateBuilder(),
+                passwordEncoder);
     }
 
     @AfterEach
@@ -125,6 +130,36 @@ class AdminServiceTest {
         assertEquals(userId, response.id());
         assertEquals(TENANT_ID, response.tenantId());
         verify(userRepository, never()).findById(userId);
+    }
+
+    @Test
+    @DisplayName("Administrator creates an active user in the current tenant with an encoded password")
+    void createUser_ShouldBeTenantScopedAndEncodePassword() {
+        when(userRepository.existsByEmailAndTenantId("new.user@example.test", TENANT_ID)).thenReturn(false);
+        when(passwordEncoder.encode("Strong@123")).thenReturn("encoded-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = adminService.createUser(
+                "New User", " NEW.USER@example.test ", "Strong@123", Role.CLIENT);
+
+        assertEquals("new.user@example.test", response.email());
+        assertEquals(TENANT_ID, response.tenantId());
+        assertEquals(Role.CLIENT, response.role());
+        assertTrue(response.active());
+        verify(passwordEncoder).encode("Strong@123");
+        verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Administrator cannot create a duplicate email in the current tenant")
+    void createUser_DuplicateEmail_ShouldRejectBeforeEncoding() {
+        when(userRepository.existsByEmailAndTenantId("existing@example.test", TENANT_ID)).thenReturn(true);
+
+        assertThrows(IllegalArgumentException.class, () -> adminService.createUser(
+                "Existing User", "existing@example.test", "Strong@123", Role.FREELANCER));
+
+        verifyNoInteractions(passwordEncoder);
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -387,7 +422,8 @@ class AdminServiceTest {
 
         when(restTemplate.getForEntity(anyString(), eq(String.class))).thenThrow(new RuntimeException("offline"));
         when(invoiceRepository.sumAmountByStatuses(anyList())).thenReturn(BigDecimal.valueOf(1200));
-        when(userRepository.countByLastLoginAtAfter(any(Instant.class))).thenReturn(3L);
+        when(userRepository.countByTenantIdAndActiveTrue(TENANT_ID)).thenReturn(6L);
+        when(userRepository.countByTenantIdAndLastLoginAtAfter(eq(TENANT_ID), any(Instant.class))).thenReturn(3L);
         when(projectRepository.countByStatusNotIn(anyList())).thenReturn(4L);
         when(invoiceRepository.countByStatusNotIn(anyList())).thenReturn(2L);
         when(auditLogRepository.countByActionAndCreatedAtAfter(eq(AuditAction.LOGIN_FAILED), any(Instant.class)))
@@ -398,6 +434,7 @@ class AdminServiceTest {
         AdminControlCenterResponse response = adminService.getControlCenter();
 
         assertEquals(BigDecimal.valueOf(1200), response.summary().totalRevenue());
+        assertEquals(6L, response.summary().activeAccounts());
         assertEquals(3L, response.summary().activeUsers24h());
         assertEquals(4L, response.summary().openProjects());
         assertEquals(2L, response.summary().unpaidInvoices());

@@ -242,6 +242,7 @@ public class TaskService extends TenantAwareService {
                 this,
                 task.getId(),
                 task.getProject().getId(),
+                task.getTenantId(),
                 task.getProject().getOwner().getId(),
                 task.getAssignedTo() != null ? task.getAssignedTo().getId() : null,
                 previousAssigneeId,

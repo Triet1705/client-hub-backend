@@ -54,14 +54,6 @@ public class ProjectService extends TenantAwareService {
         this.notificationProducerService = notificationProducerService;
     }
 
-    private void validateUserTenant(User user, String expectedTenantId) {
-        if (!expectedTenantId.equals(user.getTenantId())) {
-            logger.warn("SECURITY: Attempt to assign user {} from tenant {} to project in tenant {}",
-                    user.getId(), user.getTenantId(), expectedTenantId);
-            throw new AccessDeniedException("Cannot assign users from different tenants");
-        }
-    }
-
     private void validateStatusTransition(ProjectStatus currentStatus, ProjectStatus newStatus) {
         if (currentStatus == newStatus) {
             return;
@@ -85,21 +77,26 @@ public class ProjectService extends TenantAwareService {
     }
 
     public ProjectResponse createProject(ProjectRequest request, UUID userId) {
+        return createProject(request, userId, false);
+    }
+
+    public ProjectResponse createProject(ProjectRequest request, UUID userId, boolean isAdmin) {
         String tenantId = getCurrentTenantId();
 
-        User owner = userRepository.findById(userId)
+        User actor = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        
-        validateUserTenant(owner, tenantId);
+
+        User owner = resolveRequestedOwner(request.getOwnerId(), actor, tenantId, isAdmin);
 
         Project project = projectMapper.toEntity(request);
         project.setOwner(owner);
         project.setStatus(ProjectStatus.PLANNING);
 
         Project savedProject = projectRepository.save(project);
+        addRequestedMembers(savedProject, request.getMemberIds(), tenantId);
 
         logger.info("[AUDIT] Project created: id={}, title='{}', owner={}, tenant={}",
-                savedProject.getId(), savedProject.getTitle(), userId, tenantId);
+                savedProject.getId(), savedProject.getTitle(), owner.getId(), tenantId);
 
         return projectMapper.toResponse(savedProject);
     }
@@ -168,7 +165,13 @@ public class ProjectService extends TenantAwareService {
         }
 
         projectMapper.updateEntityFromRequest(request, project);
+        if (request.getOwnerId() != null) {
+            User actor = userRepository.findByIdAndTenantId(currentUserId, tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", currentUserId));
+            project.setOwner(resolveRequestedOwner(request.getOwnerId(), actor, tenantId, isAdmin));
+        }
         Project updatedProject = projectRepository.save(project);
+        addRequestedMembers(updatedProject, request.getMemberIds(), tenantId);
 
         if (oldStatus != ProjectStatus.COMPLETED && updatedProject.getStatus() == ProjectStatus.COMPLETED) {
             notificationProducerService.notifyProjectCompleted(updatedProject);
@@ -302,6 +305,70 @@ public class ProjectService extends TenantAwareService {
                 .filter(user -> !existingMemberIds.contains(user.getId()))
                 .map(this::toFreelancerSearchResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectFreelancerSearchResponse> searchTenantFreelancers(String keyword) {
+        String tenantId = getCurrentTenantId();
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        Pageable searchPage = PageRequest.of(0, FREELANCER_SEARCH_LIMIT);
+
+        Page<User> candidates = normalizedKeyword.isEmpty()
+                ? userRepository.findActiveUsersByTenantIdAndRole(
+                        tenantId, Role.FREELANCER, searchPage)
+                : userRepository.searchActiveUsersByTenantIdAndRoleAndKeyword(
+                        tenantId, Role.FREELANCER, normalizedKeyword, searchPage);
+
+        return candidates.getContent().stream()
+                .map(this::toFreelancerSearchResponse)
+                .toList();
+    }
+
+    private User resolveRequestedOwner(UUID requestedOwnerId, User actor, String tenantId, boolean isAdmin) {
+        if (!isAdmin) {
+            if (requestedOwnerId != null && !requestedOwnerId.equals(actor.getId())) {
+                throw new AccessDeniedException("Clients cannot assign projects to another owner");
+            }
+            return actor;
+        }
+
+        if (requestedOwnerId == null) {
+            throw new IllegalArgumentException("Project owner is required when an admin creates a project");
+        }
+
+        User owner = userRepository.findByIdAndTenantId(requestedOwnerId, tenantId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", requestedOwnerId));
+        if (!owner.isActive() || owner.getRole() != Role.CLIENT) {
+            throw new IllegalArgumentException("Project owner must be an active CLIENT in this workspace");
+        }
+        return owner;
+    }
+
+    private void addRequestedMembers(Project project, List<UUID> requestedMemberIds, String tenantId) {
+        if (requestedMemberIds == null || requestedMemberIds.isEmpty()) {
+            return;
+        }
+
+        requestedMemberIds.stream().distinct().forEach(memberId -> {
+            boolean alreadyMember = projectMemberRepository.existsByIdProjectIdAndIdUserIdAndTenantId(
+                    project.getId(), memberId, tenantId);
+            if (alreadyMember) {
+                return;
+            }
+
+            User member = userRepository.findByIdAndTenantId(memberId, tenantId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User", "id", memberId));
+            if (!member.isActive() || member.getRole() != Role.FREELANCER) {
+                throw new IllegalArgumentException("Project members must be active FREELANCER users in this workspace");
+            }
+
+            ProjectMember membership = new ProjectMember();
+            membership.setId(new ProjectMemberId(project.getId(), memberId));
+            membership.setProject(project);
+            membership.setUser(member);
+            membership.setTenantId(tenantId);
+            projectMemberRepository.save(membership);
+        });
     }
 
     private void validateProjectOwnerAccess(Project project, UUID currentUserId, boolean isAdmin) {

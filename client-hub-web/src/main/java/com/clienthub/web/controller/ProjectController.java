@@ -55,7 +55,8 @@ public class ProjectController {
             @Valid @RequestBody ProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
 
-        ProjectResponse response = projectService.createProject(request, currentUser.getId());
+        boolean isAdmin = "ADMIN".equals(currentUser.getRole());
+        ProjectResponse response = projectService.createProject(request, currentUser.getId(), isAdmin);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -196,5 +197,14 @@ public class ProjectController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         boolean isAdmin = "ADMIN".equals(currentUser.getRole());
         return ResponseEntity.ok(projectService.searchAvailableFreelancers(id, keyword, currentUser.getId(), isAdmin));
+    }
+
+    @GetMapping("/freelancers/search")
+    @PreAuthorize("hasAnyRole('CLIENT', 'ADMIN')")
+    @Operation(summary = "Search tenant freelancers", description = "Returns active freelancers in the current tenant for project creation or editing.")
+    public ResponseEntity<List<ProjectFreelancerSearchResponse>> searchTenantFreelancers(
+            @Parameter(description = "Optional case-insensitive email or full-name filter; blank is treated as omitted")
+            @RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(projectService.searchTenantFreelancers(keyword));
     }
 }
