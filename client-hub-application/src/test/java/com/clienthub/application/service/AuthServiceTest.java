@@ -22,7 +22,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.never;
@@ -129,6 +131,18 @@ class AuthServiceTest {
         assertEquals(TENANT_ID, found.getTenantId());
         verify(userRepository).findByEmailCustom("alex@example.com", TENANT_ID);
         verify(userRepository, never()).findByEmailIgnoringTenant(anyString());
+    }
+
+    @Test
+    @DisplayName("Workspace existence check validates and queries the explicit tenant slug")
+    void tenantExistsUsesExplicitTenantSlug() {
+        when(tenantRepository.existsById(TENANT_ID)).thenReturn(true);
+        when(tenantRepository.existsById("missing-workspace")).thenReturn(false);
+
+        assertTrue(authService.tenantExists(TENANT_ID));
+        assertFalse(authService.tenantExists("missing-workspace"));
+        verify(tenantRepository).existsById(TENANT_ID);
+        verify(tenantRepository).existsById("missing-workspace");
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.clienthub.web.controller;
 import com.clienthub.web.dto.auth.*;
 import com.clienthub.web.dto.common.ErrorResponse;
 import com.clienthub.application.exception.TenantAlreadyExistsException;
+import com.clienthub.common.context.TenantContext;
 import com.clienthub.domain.entity.RefreshToken;
 import com.clienthub.domain.entity.User;
 import com.clienthub.application.dto.JwtResponse;
@@ -26,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -87,11 +89,25 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(
             summary = "Login with workspace tenant",
-            description = "Authenticates an existing user. The X-Tenant-ID header identifies the workspace."
+            description = "Authenticates an existing user. The X-Tenant-ID header identifies the workspace. "
+                    + "Unknown workspaces return 404; invalid account/password combinations share a non-disclosing "
+                    + "401 response."
     )
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest,
                                               HttpServletRequest request) {
         try {
+            String tenantId = TenantContext.getTenantId();
+            if (!authService.tenantExists(tenantId)) {
+                log.warn("Login attempt for unknown workspace: {}", tenantId);
+                return ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse(
+                                "Workspace Not Found",
+                                "No workspace exists for this Tenant ID.",
+                                HttpStatus.NOT_FOUND.value()
+                        ));
+            }
+
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             loginRequest.getEmail(),
@@ -143,13 +159,22 @@ public class AuthController {
                             "Your account has been deactivated. Please contact support.",
                             HttpStatus.FORBIDDEN.value()
                     ));
+        } catch (LockedException e) {
+            log.warn("Login attempt with locked account: {}", loginRequest.getEmail());
+            return ResponseEntity
+                    .status(HttpStatus.LOCKED)
+                    .body(new ErrorResponse(
+                            "Account Locked",
+                            e.getMessage(),
+                            HttpStatus.LOCKED.value()
+                    ));
         } catch (BadCredentialsException e) {
             log.warn("Failed login attempt for email: {}", loginRequest.getEmail());
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(new ErrorResponse(
                             "Invalid Credentials",
-                            "Email or password is incorrect",
+                            "Email or password is incorrect for this workspace.",
                             HttpStatus.UNAUTHORIZED.value()
                     ));
         } catch (Exception e) {

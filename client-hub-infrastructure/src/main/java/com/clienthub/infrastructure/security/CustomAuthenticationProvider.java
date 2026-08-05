@@ -47,6 +47,11 @@ public class CustomAuthenticationProvider extends DaoAuthenticationProvider {
         
         User user = findUserForCurrentTenant(email)
                 .orElse(null);
+
+        if (user == null) {
+            log.warn("Login attempt for unknown account in tenant: {}",
+                    TenantContext.getTenantId());
+        }
         
         if (user != null) {
             if (user.isAccountLocked()) {
