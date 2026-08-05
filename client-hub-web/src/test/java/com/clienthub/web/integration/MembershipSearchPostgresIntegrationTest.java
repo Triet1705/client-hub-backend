@@ -204,6 +204,24 @@ class MembershipSearchPostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("FR04: Project creation search is tenant-scoped and matches freelancer name")
+    void tenantSearch_Keyword_ShouldReturnOnlyActiveTenantFreelancers() throws Exception {
+        performTenantSearch(owner, TENANT_A, "aLiCe")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].email").value("alice.freelancer@mem-a.test"))
+                .andExpect(MockMvcResultMatchers.content().string(
+                        not(org.hamcrest.Matchers.containsString("foreign.freelancer@mem-b.test"))));
+    }
+
+    @Test
+    @DisplayName("FR04: Project creation search rejects Freelancer callers")
+    void tenantSearch_FreelancerCaller_ShouldBeForbidden() throws Exception {
+        performTenantSearch(foreignFreelancer, TENANT_B, "foreign")
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("MEM-03: Cross-tenant membership target is a non-disclosing 404")
     void crossTenantMembershipTarget_ShouldReturnNotFound() throws Exception {
         CustomUserDetails userDetails = CustomUserDetails.build(owner);
@@ -233,6 +251,23 @@ class MembershipSearchPostgresIntegrationTest {
                 userDetails, null, userDetails.getAuthorities());
         MockHttpServletRequestBuilder request = get(
                 "/api/projects/{projectId}/freelancers/search", projectId)
+                .header("X-Tenant-ID", tenantId)
+                .with(authentication(auth));
+        if (keyword != null) {
+            request.param("keyword", keyword);
+        }
+        return mockMvc.perform(request);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions performTenantSearch(
+            User actor,
+            String tenantId,
+            String keyword
+    ) throws Exception {
+        CustomUserDetails userDetails = CustomUserDetails.build(actor);
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+        MockHttpServletRequestBuilder request = get("/api/projects/freelancers/search")
                 .header("X-Tenant-ID", tenantId)
                 .with(authentication(auth));
         if (keyword != null) {

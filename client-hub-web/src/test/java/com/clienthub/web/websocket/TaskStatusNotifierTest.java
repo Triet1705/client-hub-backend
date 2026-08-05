@@ -20,6 +20,7 @@ class TaskStatusNotifierTest {
         TaskStatusNotifier notifier = new TaskStatusNotifier(messagingTemplate);
         UUID taskId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
+        String tenantId = "default";
         UUID ownerId = UUID.randomUUID();
         UUID assigneeId = UUID.randomUUID();
 
@@ -27,6 +28,7 @@ class TaskStatusNotifierTest {
                 this,
                 taskId,
                 projectId,
+                tenantId,
                 ownerId,
                 assigneeId,
                 null,
@@ -38,6 +40,10 @@ class TaskStatusNotifierTest {
                 (Object) argThat(message -> message instanceof TaskStatusNotifier.TaskChangedMessage changed
                         && changed.id().equals(taskId)
                         && changed.status() == TaskStatus.IN_PROGRESS));
+        verify(messagingTemplate).convertAndSend(
+                (String) eq("/topic/tenants/" + tenantId + "/tasks"),
+                (Object) argThat(message -> message instanceof TaskStatusNotifier.TaskChangedMessage changed
+                        && changed.id().equals(taskId)));
         verify(messagingTemplate).convertAndSend(
                 (String) eq("/topic/users/" + assigneeId + "/tasks"),
                 (Object) argThat(message -> message instanceof TaskStatusNotifier.TaskChangedMessage changed

@@ -1,6 +1,5 @@
 package com.clienthub.infrastructure.security.config;
 
-import com.clienthub.domain.enums.Role;
 import com.clienthub.infrastructure.security.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -67,7 +66,10 @@ public class SecurityConfig {
 
                 // Security Headers (Task 3.1)
                 .headers(headers -> headers
-                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; frame-ancestors 'none'; sandbox"))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+                                "img-src 'self' data:; font-src 'self' data:; object-src 'none'; " +
+                                "base-uri 'self'; frame-ancestors 'none'"))
                         .frameOptions(frame -> frame.deny())
                         .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
                 )
@@ -83,8 +85,10 @@ public class SecurityConfig {
                         // The STOMP CONNECT frame is authenticated in WebSocketConfig.
                         .requestMatchers("/ws/**").permitAll()
 
-                        // Restrict Swagger to admins (Task 3.2)
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").hasRole(Role.ADMIN.name())
+                        // Swagger assets must load before the UI can attach an Authorization header.
+                        // Business endpoints remain protected and are exercised with the bearer token
+                        // configured through Swagger's Authorize dialog.
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/swagger-auth/**").permitAll()
 
                         .anyRequest().authenticated()
                 )

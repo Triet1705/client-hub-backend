@@ -13,6 +13,7 @@ public class TaskChangedEvent extends ApplicationEvent {
 
     private final UUID taskId;
     private final UUID projectId;
+    private final String tenantId;
     private final UUID projectOwnerId;
     private final UUID assigneeId;
     private final UUID previousAssigneeId;
@@ -24,6 +25,7 @@ public class TaskChangedEvent extends ApplicationEvent {
             Object source,
             UUID taskId,
             UUID projectId,
+            String tenantId,
             UUID projectOwnerId,
             UUID assigneeId,
             UUID previousAssigneeId,
@@ -32,6 +34,7 @@ public class TaskChangedEvent extends ApplicationEvent {
         super(source);
         this.taskId = taskId;
         this.projectId = projectId;
+        this.tenantId = tenantId;
         this.projectOwnerId = projectOwnerId;
         this.assigneeId = assigneeId;
         this.previousAssigneeId = previousAssigneeId;
@@ -46,6 +49,10 @@ public class TaskChangedEvent extends ApplicationEvent {
 
     public UUID getProjectId() {
         return projectId;
+    }
+
+    public String getTenantId() {
+        return tenantId;
     }
 
     public UUID getProjectOwnerId() {

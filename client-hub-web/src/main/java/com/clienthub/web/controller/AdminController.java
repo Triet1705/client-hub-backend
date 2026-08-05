@@ -8,6 +8,7 @@ import com.clienthub.domain.enums.AuditAnchorBatchStatus;
 import com.clienthub.domain.enums.AuditRecordAnchorStatus;
 import com.clienthub.domain.enums.Role;
 import com.clienthub.web.dto.admin.ForceStatusRequest;
+import com.clienthub.web.dto.admin.AdminCreateUserRequest;
 import com.clienthub.web.dto.admin.UserRoleRequest;
 import com.clienthub.web.dto.admin.UserStatusRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -71,6 +73,16 @@ public class AdminController {
             @Parameter(description = "Sort field") @RequestParam(defaultValue = "createdAt") String sortBy,
             @Parameter(description = "Sort direction: asc or desc") @RequestParam(defaultValue = "desc") String sortDir) {
         return ResponseEntity.ok(adminService.listUsers(role, active, keyword, buildPageable(page, size, sortBy, sortDir)));
+    }
+
+    @PostMapping("/users")
+    @Operation(summary = "Create a user in the Administrator tenant",
+               description = "Creates an active ADMIN, CLIENT, or FREELANCER account in the current tenant")
+    public ResponseEntity<AdminUserResponse> createUser(
+            @Valid @RequestBody AdminCreateUserRequest request) {
+        AdminUserResponse response = adminService.createUser(
+                request.fullName(), request.email(), request.password(), request.role());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/users/{id}")

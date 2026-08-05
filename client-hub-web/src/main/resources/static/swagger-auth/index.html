@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client Hub API Console</title>
+  <link rel="stylesheet" href="/swagger-ui/swagger-ui.css">
+  <link rel="stylesheet" href="/swagger-auth/swagger-login.css">
+</head>
+<body>
+  <section class="client-hub-auth" aria-label="Swagger authentication">
+    <div class="client-hub-auth__heading">
+      <strong>Client Hub API Console</strong>
+      <span>Sign in once to authorize Swagger requests for the selected workspace.</span>
+    </div>
+    <form id="swagger-login-form" class="client-hub-auth__form">
+      <label><span>Workspace</span><input id="swagger-tenant" value="default" autocomplete="organization" required></label>
+      <label><span>Admin email</span><input id="swagger-email" type="email" value="admin@clienthub.io" autocomplete="username" required></label>
+      <label><span>Password</span><input id="swagger-password" type="password" autocomplete="current-password" required></label>
+      <button id="swagger-login-button" type="submit">Sign in &amp; authorize</button>
+    </form>
+    <p id="swagger-login-status" class="client-hub-auth__status" role="status" aria-live="polite">Passwords and tokens are kept only in this page memory.</p>
+  </section>
+  <div id="swagger-ui"></div>
+  <script src="/swagger-ui/swagger-ui-bundle.js"></script>
+  <script src="/swagger-ui/swagger-ui-standalone-preset.js"></script>
+  <script src="/swagger-auth/swagger-login.js"></script>
+</body>
+</html>

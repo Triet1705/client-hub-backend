@@ -24,6 +24,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             Pattern.compile("^/topic/projects/([0-9a-fA-F-]{36})/tasks$");
     private static final Pattern USER_TASK_TOPIC =
             Pattern.compile("^/topic/users/([0-9a-fA-F-]{36})/tasks$");
+    private static final Pattern USER_INVOICE_TOPIC =
+            Pattern.compile("^/topic/users/([0-9a-fA-F-]{36})/invoices$");
+    private static final Pattern TENANT_INVOICE_TOPIC =
+            Pattern.compile("^/topic/tenants/([A-Za-z0-9_-]{1,100})/invoices$");
+    private static final Pattern TENANT_TASK_TOPIC =
+            Pattern.compile("^/topic/tenants/([A-Za-z0-9_-]{1,100})/tasks$");
 
     @org.springframework.beans.factory.annotation.Value("${cors.allowed-origins:*}")
     private String[] allowedOrigins;
@@ -116,6 +122,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             Matcher invoiceMatcher = INVOICE_STATUS_TOPIC.matcher(destination);
             Matcher projectMatcher = PROJECT_TASK_TOPIC.matcher(destination);
             Matcher userMatcher = USER_TASK_TOPIC.matcher(destination);
+            Matcher userInvoiceMatcher = USER_INVOICE_TOPIC.matcher(destination);
+            Matcher tenantInvoiceMatcher = TENANT_INVOICE_TOPIC.matcher(destination);
+            Matcher tenantTaskMatcher = TENANT_TASK_TOPIC.matcher(destination);
             if (invoiceMatcher.matches()) {
                 Long invoiceId = Long.valueOf(invoiceMatcher.group(1));
                 allowed = "ADMIN".equals(role)
@@ -129,6 +138,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         && projectRepository.existsByIdAndTenantIdAndOwnerId(projectId, tenantId, userId);
             } else if (userMatcher.matches()) {
                 allowed = userId.equals(UUID.fromString(userMatcher.group(1)));
+            } else if (userInvoiceMatcher.matches()) {
+                allowed = userId.equals(UUID.fromString(userInvoiceMatcher.group(1)));
+            } else if (tenantInvoiceMatcher.matches()) {
+                allowed = "ADMIN".equals(role) && tenantId.equals(tenantInvoiceMatcher.group(1));
+            } else if (tenantTaskMatcher.matches()) {
+                allowed = "ADMIN".equals(role) && tenantId.equals(tenantTaskMatcher.group(1));
             } else {
                 throw new org.springframework.messaging.MessageDeliveryException(
                         "Unsupported subscription destination");

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 public record ControlCenterSummary(
         BigDecimal totalRevenue,
+        long activeAccounts,
         long activeUsers24h,
         long openProjects,
         long unpaidInvoices,
